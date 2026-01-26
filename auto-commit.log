@@ -5036,3 +5036,59 @@ hint:
 hint: 	git rm --cached .agent/skill
 hint: 
 hint: See "git help submodule" for more information.
+[main (root-commit) f6e5a94] Auto-commit: 2026-01-26 09:32:59
+ 52 files changed, 16561 insertions(+)
+ create mode 100644 .agent/rules/rule.md
+ create mode 160000 .agent/skill
+ create mode 100644 .agent/workflows/init.md
+ create mode 100644 .cursorrules
+ create mode 100644 .gitignore
+ create mode 100644 AUTO_COMMIT.md
+ create mode 100644 README.md
+ create mode 100644 auto-commit.log
+ create mode 100755 auto-commit.sh
+ create mode 100644 categories_data.js
+ create mode 100644 docs/DECISIONS.md
+ create mode 100644 docs/GUIDE_TOKEN.md
+ create mode 100644 docs/HISTORY_ANALYSIS.md
+ create mode 100644 docs/PROJECT.md
+ create mode 100644 docs/SESSION.md
+ create mode 100644 docs/real_time_plan.md
+ create mode 100644 docs/vercel.md
+ create mode 100644 eslint.config.mjs
+ create mode 100644 exchange-token.js
+ create mode 100644 index.html
+ create mode 100644 log.md
+ create mode 100644 next.config.ts
+ create mode 100644 package-lock.json
+ create mode 100644 package.json
+ create mode 100644 postcss.config.mjs
+ create mode 100644 products_data.js
+ create mode 100644 public/file.svg
+ create mode 100644 public/globe.svg
+ create mode 100644 public/next.svg
+ create mode 100644 public/vercel.svg
+ create mode 100644 public/window.svg
+ create mode 100644 src/app/api/categories/route.ts
+ create mode 100644 src/app/api/products/route.ts
+ create mode 100644 src/app/api/webhook/cafe24/route.ts
+ create mode 100644 src/app/favicon.ico
+ create mode 100644 src/app/globals.css
+ create mode 100644 src/app/layout.tsx
+ create mode 100644 src/app/page.tsx
+ create mode 100644 src/components/ProductTable.tsx
+ create mode 100644 src/components/catalog/CartSummaryBar.tsx
+ create mode 100644 src/components/catalog/CatalogHeader.tsx
+ create mode 100644 src/components/catalog/CategoryTabs.tsx
+ create mode 100644 src/components/catalog/ProductList.tsx
+ create mode 100644 src/components/catalog/QuoteRequestModal.tsx
+ create mode 100644 src/lib/api-client.ts
+ create mode 100644 src/lib/cafe24-auth.ts
+ create mode 100644 src/lib/utils.ts
+ create mode 100644 tailwind.config.ts
+ create mode 100644 test-api.js
+ create mode 100644 test-lightning.js
+ create mode 100644 test-refresh.js
+ create mode 100644 tsconfig.json
+✅ Auto-committed successfully
+---
