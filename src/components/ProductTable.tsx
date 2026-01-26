@@ -40,7 +40,17 @@ interface QuoteFormData {
   message: string;
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    const error = new Error(errorData.error || 'API 요청 중 오류가 발생했습니다.');
+    (error as any).status = res.status;
+    (error as any).info = errorData;
+    throw error;
+  }
+  return res.json();
+};
 
 export default function ProductTable() {
   const [search, setSearch] = useState('');

@@ -5276,3 +5276,8 @@ hint: See "git help submodule" for more information.
  2 files changed, 8 insertions(+), 3 deletions(-)
 ✅ Auto-committed successfully
 ---
+
+📦 Changes detected at 2026-01-26 14:34:16
+ M auto-commit.log
+ M src/components/ProductTable.tsx
+ M src/lib/cafe24-auth.ts

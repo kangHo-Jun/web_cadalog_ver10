@@ -2,7 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 
-const TOKEN_PATH = path.join(process.cwd(), '.tokens.json');
+const TOKEN_PATH = process.env.NODE_ENV === 'production'
+    ? path.join('/tmp', '.tokens.json')
+    : path.join(process.cwd(), '.tokens.json');
 
 interface Tokens {
     access_token: string;
@@ -27,7 +29,12 @@ export function getTokens(): Tokens {
 
 export function saveTokens(tokens: Tokens) {
     try {
+        const dir = path.dirname(TOKEN_PATH);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
+        console.log(`Tokens saved to ${TOKEN_PATH}`);
     } catch (error) {
         console.error('Error saving tokens file:', error);
     }
