@@ -14,11 +14,11 @@ interface Product {
   product_no: number;
   product_name: string;
   price: string;
-  display: string;
-  selling: string;
+  display?: string;
+  selling?: string;
   detail_image: string;
   product_code: string;
-  created_date: string;
+  created_date?: string;
 }
 
 interface Category {
