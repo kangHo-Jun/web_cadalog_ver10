@@ -5311,3 +5311,11 @@ hint: See "git help submodule" for more information.
  M auto-commit.log
  M src/lib/cafe24-auth.ts
 ?? src/lib/token-store.ts
+[main 3ab37d4] Auto-commit: 2026-01-26 15:20:24
+ 3 files changed, 50 insertions(+), 44 deletions(-)
+ create mode 100644 src/lib/token-store.ts
+✅ Auto-committed successfully
+---
+
+📦 Changes detected at 2026-01-26 15:20:54
+ M auto-commit.log
