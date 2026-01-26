@@ -27,12 +27,12 @@ apiClient.interceptors.response.use(
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             try {
-                console.log('401 detected, attempting token refresh...');
+                console.log('🔄 401 detected, attempting token refresh...');
                 const newAccessToken = await refreshAccessToken();
                 originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                 return apiClient(originalRequest);
             } catch (refreshError) {
-                console.error('Token refresh failed, redirecting or handling error...');
+                console.error('❌ Token refresh failed');
                 return Promise.reject(refreshError);
             }
         }
