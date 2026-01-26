@@ -1,47 +1,10 @@
-import fs from 'fs';
-import path from 'path';
 import axios from 'axios';
+import { getTokens, saveTokens, type Tokens } from './token-store';
 
-const TOKEN_PATH = process.env.NODE_ENV === 'production'
-    ? path.join('/tmp', '.tokens.json')
-    : path.join(process.cwd(), '.tokens.json');
-
-interface Tokens {
-    access_token: string;
-    refresh_token: string;
-}
-
-export function getTokens(): Tokens {
-    try {
-        if (fs.existsSync(TOKEN_PATH)) {
-            const data = fs.readFileSync(TOKEN_PATH, 'utf8');
-            return JSON.parse(data);
-        }
-    } catch (error) {
-        console.error('Error reading tokens file:', error);
-    }
-
-    return {
-        access_token: process.env.CAFE24_ACCESS_TOKEN || '',
-        refresh_token: process.env.CAFE24_REFRESH_TOKEN || '',
-    };
-}
-
-export function saveTokens(tokens: Tokens) {
-    try {
-        const dir = path.dirname(TOKEN_PATH);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
-        console.log(`Tokens saved to ${TOKEN_PATH}`);
-    } catch (error) {
-        console.error('Error saving tokens file:', error);
-    }
-}
+export { getTokens };
 
 export async function refreshAccessToken() {
-    const { refresh_token } = getTokens();
+    const { refresh_token } = await getTokens();
     const mallId = process.env.MALL_ID;
     const clientId = process.env.CAFE24_CLIENT_ID;
     const clientSecret = process.env.CAFE24_CLIENT_SECRET;
@@ -67,16 +30,17 @@ export async function refreshAccessToken() {
             }
         );
 
-        const newTokens = {
+        const newTokens: Tokens = {
             access_token: response.data.access_token,
             refresh_token: response.data.refresh_token,
+            expires_at: Date.now() + 2 * 60 * 60 * 1000, // 2 hours
         };
 
-        saveTokens(newTokens);
-        console.log('Successfully refreshed Cafe24 tokens');
+        await saveTokens(newTokens);
+        console.log('✅ Successfully refreshed and saved Cafe24 tokens');
         return newTokens.access_token;
     } catch (error: any) {
-        console.error('Failed to refresh tokens:', error.response?.data || error.message);
+        console.error('❌ Failed to refresh tokens:', error.response?.data || error.message);
         throw error;
     }
 }
