@@ -22,7 +22,7 @@ require('dotenv').config({ path: '.env.local' });
 const MALL_ID = process.env.MALL_ID;
 const CLIENT_ID = process.env.CAFE24_CLIENT_ID;
 const CLIENT_SECRET = process.env.CAFE24_CLIENT_SECRET;
-const REDIRECT_URI = process.env.CAFE24_REDIRECT_URI || 'http://localhost:3000/api/auth/callback';
+const REDIRECT_URI = process.env.CAFE24_REDIRECT_URI || 'https://web-cadalog-ver10.vercel.app/api/auth/callback';
 
 if (!MALL_ID || !CLIENT_ID || !CLIENT_SECRET) {
     console.error('❌ Missing required environment variables:');
