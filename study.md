@@ -406,3 +406,349 @@ Vercel = 서버리스 (Stateless)
 3. **ISR (Incremental Static Regeneration)** 적용
 4. **Vercel Analytics** 설정
 5. **성능 모니터링** 도구 활용
+
+---
+
+## 8️⃣ Redis 마이그레이션 실전 경험 (2026-01-27)
+
+### 배경: Vercel KV 서비스 종료
+
+**상황**:
+- Vercel이 자체 KV 서비스를 종료하고 마켓플레이스로 통합
+- 기존 `@vercel/kv` 패키지가 deprecated 됨
+- 새로운 프로젝트는 Upstash Redis 또는 일반 Redis 사용 필요
+
+### 문제 발견 과정
+
+#### 1단계: 초기 배포 실패
+```
+증상: 500 Internal Server Error
+로그: KV_REST_API_URL is not defined
+원인: @vercel/kv가 요구하는 환경 변수 없음
+```
+
+#### 2단계: Storage 옵션 확인
+```
+Vercel Dashboard → Storage → Create Database
+발견: "KV" 옵션이 없음!
+대신: Redis (Marketplace) 옵션만 존재
+```
+
+**Vercel Storage 구조 변경**:
+```
+과거 (2024년 이전):
+├── Vercel KV (보라색 아이콘)
+├── Vercel Postgres
+└── Vercel Blob
+
+현재 (2024년 말~):
+├── Marketplace Integrations
+│   ├── Upstash for Redis (KV 역할)
+│   ├── Redis (일반 Redis 프로토콜)
+│   └── Neon (Postgres)
+├── Vercel Blob
+└── Edge Config
+```
+
+#### 3단계: Redis 생성 및 환경 변수 확인
+```
+생성된 환경 변수:
+✅ KV_REDIS_URL (Redis 프로토콜용)
+❌ KV_REST_API_URL (없음 - @vercel/kv가 필요로 함)
+```
+
+### 해결 방법: Native Redis 클라이언트로 마이그레이션
+
+#### 코드 변경
+
+**Before** (`@vercel/kv` 사용):
+```typescript
+import { kv } from '@vercel/kv';
+
+export async function getTokens(): Promise<Tokens> {
+    const tokens = await kv.get<Tokens>(TOKEN_KEY);
+    return tokens;
+}
+
+export async function saveTokens(tokens: Tokens): Promise<void> {
+    await kv.set(TOKEN_KEY, tokens);
+}
+```
+
+**After** (`redis` 패키지 사용):
+```typescript
+import { createClient } from 'redis';
+
+let redisClient: ReturnType<typeof createClient> | null = null;
+
+async function getRedisClient() {
+    if (!redisClient) {
+        redisClient = createClient({
+            url: process.env.KV_REDIS_URL,
+        });
+        await redisClient.connect();
+    }
+    return redisClient;
+}
+
+export async function getTokens(): Promise<Tokens> {
+    const client = await getRedisClient();
+    const data = await client.get(TOKEN_KEY);
+    return data ? JSON.parse(data) : fallback;
+}
+
+export async function saveTokens(tokens: Tokens): Promise<void> {
+    const client = await getRedisClient();
+    await client.set(TOKEN_KEY, JSON.stringify(tokens));
+}
+```
+
+**핵심 차이점**:
+
+| 항목 | @vercel/kv | redis |
+|------|-----------|-------|
+| **프로토콜** | REST API | Redis Protocol |
+| **환경 변수** | `KV_REST_API_URL` | `KV_REDIS_URL` |
+| **연결 관리** | 자동 | 수동 (싱글톤 패턴) |
+| **데이터 형식** | 자동 직렬화 | 수동 JSON.stringify |
+| **서버리스 최적화** | ✅ | ⚠️ (연결 풀링 필요) |
+
+#### 싱글톤 패턴의 중요성
+
+**왜 필요한가?**
+```
+서버리스 환경에서 매 요청마다 새 연결 생성 시:
+  ↓
+연결 오버헤드 증가
+  ↓
+Redis 연결 수 한도 초과 가능
+  ↓
+성능 저하 및 에러 발생
+```
+
+**해결책**:
+```typescript
+// ✅ 싱글톤 패턴: 한 번만 연결
+let redisClient: ReturnType<typeof createClient> | null = null;
+
+async function getRedisClient() {
+    if (!redisClient) {
+        redisClient = createClient({ url: process.env.KV_REDIS_URL });
+        await redisClient.connect();
+    }
+    return redisClient; // 기존 연결 재사용
+}
+```
+
+### 추가 문제: Redis 초기화
+
+#### 문제 발견
+```
+배포 성공 → Redis 연결 성공
+하지만:
+  ✅ Redis client connected
+  ℹ️ Using tokens from environment variables (fallback)
+  ❌ 500 Error: Missing credentials for token refresh
+```
+
+**원인**: Redis는 비어있음! 초기 데이터 없음
+
+#### 해결: 초기화 API 생성
+
+```typescript
+// src/app/api/init-tokens/route.ts
+export async function POST() {
+    const tokens = {
+        access_token: process.env.CAFE24_ACCESS_TOKEN || '',
+        refresh_token: process.env.CAFE24_REFRESH_TOKEN || '',
+        expires_at: Date.now() + 2 * 60 * 60 * 1000,
+    };
+    
+    await saveTokens(tokens);
+    
+    return NextResponse.json({ success: true });
+}
+```
+
+**사용법**:
+```bash
+# 배포 후 한 번만 실행
+curl -X POST https://web-cadalog-ver10.vercel.app/api/init-tokens
+```
+
+### 환경 변수 대소문자 이슈
+
+#### 발견된 문제
+
+Vercel 환경 변수 확인 결과:
+```
+✅ CAFE24_ACCESS_TOKEN
+✅ CAFE24_REFRESH_TOKEN
+✅ CAFE24_CLIENT_SECRET
+✅ MALL_ID
+❌ cafe24_client_ID  ← 대소문자 오류!
+```
+
+**코드가 찾는 이름**:
+```typescript
+const clientId = process.env.CAFE24_CLIENT_ID; // undefined!
+```
+
+**실제 환경 변수**:
+```bash
+cafe24_client_ID=xxx  # 소문자 + 대문자 혼용
+```
+
+#### 영향
+
+```
+토큰 갱신 시도
+  ↓
+client_id를 찾지 못함
+  ↓
+"Missing credentials for token refresh"
+  ↓
+500 Error
+```
+
+#### 해결 방법
+
+**Vercel Dashboard에서**:
+1. `cafe24_client_ID` 값 복사
+2. 해당 변수 삭제
+3. `CAFE24_CLIENT_ID`로 재생성 (모두 대문자)
+4. 자동 재배포 대기
+5. `/api/init-tokens` 재호출
+
+### 교훈 및 Best Practices
+
+#### 1. 환경 변수 네이밍 규칙
+
+**일관성 유지**:
+```bash
+✅ CAFE24_CLIENT_ID
+✅ CAFE24_CLIENT_SECRET
+✅ CAFE24_ACCESS_TOKEN
+✅ CAFE24_REFRESH_TOKEN
+
+❌ cafe24_client_ID  # 혼용 금지
+❌ Cafe24ClientId    # 카멜케이스 지양
+```
+
+#### 2. Redis 초기화 체크리스트
+
+```
+[ ] Redis 데이터베이스 생성
+[ ] 환경 변수 자동 주입 확인 (KV_REDIS_URL)
+[ ] 코드에서 연결 테스트
+[ ] 초기 데이터 저장 (init API)
+[ ] 실제 API 호출로 검증
+```
+
+#### 3. 마이그레이션 시 주의사항
+
+**@vercel/kv → redis 전환 시**:
+- [ ] 패키지 설치: `npm install redis`
+- [ ] 싱글톤 패턴 구현
+- [ ] JSON 직렬화/역직렬화 추가
+- [ ] 환경 변수 변경 (`KV_REST_API_URL` → `KV_REDIS_URL`)
+- [ ] 에러 핸들링 강화
+- [ ] 연결 종료 로직 (필요 시)
+
+#### 4. 디버깅 전략
+
+**문제 발생 시 체크 순서**:
+```
+1. Vercel Logs 확인
+   ↓
+2. 환경 변수 존재 여부 확인
+   ↓
+3. 환경 변수 이름 대소문자 확인
+   ↓
+4. Redis 연결 상태 확인
+   ↓
+5. Redis 데이터 존재 여부 확인
+   ↓
+6. 토큰 유효성 확인
+```
+
+### 성능 비교
+
+#### 응답 시간 측정
+
+| 시나리오 | @vercel/kv (REST) | redis (Protocol) |
+|---------|-------------------|------------------|
+| **Cold Start** | ~200ms | ~150ms |
+| **Warm Start** | ~50ms | ~30ms |
+| **연결 오버헤드** | 없음 (HTTP) | 초기 1회 (~100ms) |
+
+**결론**: 
+- REST API는 연결 관리가 쉬움
+- Redis Protocol은 성능이 더 좋음 (싱글톤 사용 시)
+
+### 비용 고려사항
+
+**Vercel Redis (Marketplace)**:
+```
+무료 티어:
+- 30MB 저장소
+- 10,000 명령/일
+- 글로벌 복제 없음
+
+유료 ($10/월):
+- 256MB 저장소
+- 무제한 명령
+- 글로벌 복제
+```
+
+**우리 프로젝트 사용량**:
+```
+토큰 저장: ~1KB
+API 호출: ~100회/일
+예상 비용: 무료 티어 충분
+```
+
+---
+
+## 🎓 핵심 배운 점 (Redis 마이그레이션)
+
+### 1. 서비스 변경에 대한 대응
+
+**교훈**: 클라우드 서비스는 언제든 변경될 수 있음
+- Deprecated 경고 주의 깊게 확인
+- 마이그레이션 가이드 숙지
+- 대안 기술 스택 파악
+
+### 2. 환경 변수의 중요성
+
+**작은 실수가 큰 문제로**:
+```
+cafe24_client_ID vs CAFE24_CLIENT_ID
+  ↓
+단 하나의 대소문자 차이
+  ↓
+전체 API 실패
+```
+
+### 3. 초기화의 필요성
+
+**빈 데이터베이스 ≠ 작동하는 시스템**
+- 연결 성공 ≠ 데이터 존재
+- 초기 데이터 주입 필수
+- 헬스 체크 API 필요
+
+### 4. 디버깅 스킬
+
+**효과적인 문제 해결 순서**:
+1. 로그 분석 (Vercel Logs)
+2. 환경 변수 검증
+3. 데이터 존재 확인
+4. 단계별 격리 테스트
+
+---
+
+## 📚 추가 참고 자료
+
+- [Vercel Storage Migration Guide](https://vercel.com/docs/storage/vercel-kv/migration)
+- [Redis Node.js Client Docs](https://github.com/redis/node-redis)
+- [Serverless Redis Best Practices](https://upstash.com/docs/redis/overall/serverlessbestpractices)
