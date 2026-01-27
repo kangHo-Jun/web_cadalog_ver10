@@ -5,7 +5,10 @@ import axios from 'axios';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get('type'); // 'quote' for 견적서 categories only
+
   try {
     const response = await apiClient.get('/categories', {
       params: {
@@ -13,13 +16,31 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(response.data, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-      },
-    });
+    let categories = response.data.categories || [];
+
+    // Filter for quote categories if type=quote
+    if (type === 'quote') {
+      categories = categories.filter((category: any) =>
+        category.category_name?.includes('(견적서)')
+      );
+
+      // Add display_name with "(견적서)" removed
+      categories = categories.map((category: any) => ({
+        ...category,
+        display_name: category.category_name.replace('(견적서)', '').trim()
+      }));
+    }
+
+    return NextResponse.json(
+      { ...response.data, categories },
+      {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error: any) {
     if (axios.isAxiosError(error)) {
       console.error('Cafe24 Categories API Error:', {
