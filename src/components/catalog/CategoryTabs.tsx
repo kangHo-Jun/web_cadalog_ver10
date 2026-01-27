@@ -3,6 +3,7 @@ import React from 'react';
 interface Category {
     category_no: number;
     category_name: string;
+    display_name?: string;
 }
 
 interface CategoryTabsProps {
@@ -32,7 +33,7 @@ const CategoryTabs: React.FC<CategoryTabsProps> = ({ categories, selectedCategor
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
                         }`}
                 >
-                    {cat.category_name}
+                    {cat.display_name || cat.category_name}
                 </button>
             ))}
         </div>

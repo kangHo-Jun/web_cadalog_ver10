@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import apiClient from '@/lib/api-client';
 import axios from 'axios';
+import { QUOTE_CATEGORIES } from '@/config/quote-categories';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,32 +11,30 @@ export async function GET(request: Request) {
   const type = searchParams.get('type'); // 'quote' for 견적서 categories only
 
   try {
-    // For quote type, fetch hidden categories (display='F')
-    // For normal type, fetch displayed categories (display='T')
-    const displayParam = type === 'quote' ? 'F' : 'T';
+    // For quote type, return manually registered quote categories
+    // (Cafe24 API doesn't support fetching hidden categories)
+    if (type === 'quote') {
+      return NextResponse.json(
+        { categories: QUOTE_CATEGORIES },
+        {
+          headers: {
+            'Cache-Control': 'no-store, max-age=0, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
+      );
+    }
 
+    // For normal type, fetch displayed categories from Cafe24 API
     const response = await apiClient.get('/categories', {
       params: {
         depth: 1,
         limit: 100,
-        display: displayParam,
       },
     });
 
-    let categories = response.data.categories || [];
-
-    // Filter for quote categories if type=quote
-    if (type === 'quote') {
-      categories = categories.filter((category: any) =>
-        category.category_name?.includes('(견적서)')
-      );
-
-      // Add display_name with "(견적서)" removed
-      categories = categories.map((category: any) => ({
-        ...category,
-        display_name: category.category_name.replace('(견적서)', '').trim()
-      }));
-    }
+    const categories = response.data.categories || [];
 
     return NextResponse.json(
       { ...response.data, categories },
