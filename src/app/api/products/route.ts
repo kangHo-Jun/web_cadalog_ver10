@@ -26,7 +26,11 @@ export async function GET(request: Request) {
             selling: 'T',
             limit: 100,
           },
-        }).catch(() => ({ data: { products: [] } }))
+          timeout: 10000, // 10 second timeout
+        }).catch((err) => {
+          console.error(`Failed to fetch products for category ${catNo}:`, err.message);
+          return { data: { products: [] } };
+        })
       );
 
       const responses = await Promise.all(productPromises);
