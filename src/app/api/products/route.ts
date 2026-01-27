@@ -12,13 +12,17 @@ export async function GET(request: Request) {
   const type = searchParams.get('type'); // 'quote' for 견적서 products only
 
   try {
+    // For quote type, fetch hidden products (display='F')
+    // For normal type, fetch displayed products (display='T')
+    const displayParam = type === 'quote' ? 'F' : 'T';
+
     const response = await apiClient.get('/products', {
       params: {
         product_name: keyword || undefined,
         category: category || undefined,
-        display: 'T',
+        display: displayParam,
         selling: 'T',
-        limit: 50,
+        limit: 100,
       },
     });
 

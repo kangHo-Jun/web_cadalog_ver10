@@ -10,10 +10,15 @@ export async function GET(request: Request) {
   const type = searchParams.get('type'); // 'quote' for 견적서 categories only
 
   try {
+    // For quote type, fetch hidden categories (display='F')
+    // For normal type, fetch displayed categories (display='T')
+    const displayParam = type === 'quote' ? 'F' : 'T';
+
     const response = await apiClient.get('/categories', {
       params: {
         depth: 1,
         limit: 100,
+        display: displayParam,
       },
     });
 
