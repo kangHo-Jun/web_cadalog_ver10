@@ -10,6 +10,7 @@ export interface QuoteCategory {
   category_no: number;
   category_name: string;      // Cafe24에서 사용하는 전체 이름
   display_name: string;       // 화면에 표시할 이름 (견적서) 제거된 버전
+  category_depth: number;     // 카테고리 깊이 (대분류 = 1)
 }
 
 export const QUOTE_CATEGORIES: QuoteCategory[] = [
@@ -17,17 +18,20 @@ export const QUOTE_CATEGORIES: QuoteCategory[] = [
     category_no: 325,
     category_name: '단열재(견적서)',
     display_name: '단열재',
+    category_depth: 1,
   },
   {
     category_no: 326,
     category_name: '석고보드(견적서)',
     display_name: '석고보드',
+    category_depth: 1,
   },
   // 새로운 견적서 카테고리를 여기에 추가하세요
   // {
   //   category_no: 327,
   //   category_name: '카테고리명(견적서)',
   //   display_name: '카테고리명',
+  //   category_depth: 1,
   // },
 ];
 
