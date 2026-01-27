@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const response = await apiClient.get('/categories', {
       params: {
         depth: 1,
+        limit: 100,
       },
     });
 
