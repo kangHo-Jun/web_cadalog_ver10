@@ -140,10 +140,10 @@ export default function QuoteCatalog() {
         }
     }, [products]);
 
-    const updateQuantity = (id: number, delta: number) => {
+    const updateQuantity = (id: number, delta: number, absolute?: number) => {
         setQuantities(prev => ({
             ...prev,
-            [id]: Math.max(1, (prev[id] || 1) + delta)
+            [id]: absolute !== undefined ? absolute : Math.max(0, (prev[id] || 0) + delta)
         }));
     };
 

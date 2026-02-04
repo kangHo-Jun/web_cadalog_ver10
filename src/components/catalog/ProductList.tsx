@@ -16,7 +16,7 @@ interface ProductListProps {
     error: any;
     quantities: Record<number, number>;
     cartItemIds: number[];
-    onUpdateQuantity: (id: number, delta: number) => void;
+    onUpdateQuantity: (id: number, delta: number, absolute?: number) => void;
     onAddToCart: (product: Product) => void;
 }
 
@@ -90,20 +90,21 @@ const ProductList: React.FC<ProductListProps> = ({
                                                 </button>
                                                 <input
                                                     type="number"
-                                                    value={quantities[product.product_no] || 1}
+                                                    value={quantities[product.product_no] === 0 ? '' : (quantities[product.product_no] || 1)}
                                                     onChange={(e) => {
-                                                        const val = parseInt(e.target.value);
+                                                        const val = e.target.value === '' ? 0 : parseInt(e.target.value);
                                                         if (!isNaN(val)) {
-                                                            onUpdateQuantity(product.product_no, val - (quantities[product.product_no] || 1));
+                                                            onUpdateQuantity(product.product_no, 0, val);
                                                         }
                                                     }}
                                                     onBlur={(e) => {
                                                         const val = parseInt(e.target.value);
                                                         if (isNaN(val) || val < 1) {
-                                                            onUpdateQuantity(product.product_no, 1 - (quantities[product.product_no] || 1));
+                                                            onUpdateQuantity(product.product_no, 0, 1);
                                                         }
                                                     }}
                                                     className="w-12 text-center text-sm font-bold text-gray-900 bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                    placeholder="1"
                                                 />
                                                 <button onClick={() => onUpdateQuantity(product.product_no, 1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
                                                     <Plus className="w-3 h-3" />
