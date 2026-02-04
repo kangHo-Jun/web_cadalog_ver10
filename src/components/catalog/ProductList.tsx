@@ -84,11 +84,27 @@ const ProductList: React.FC<ProductListProps> = ({
                                             {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(Number(product.price))}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 bg-gray-100 w-fit rounded-lg p-1 border border-gray-200">
+                                            <div className="flex items-center gap-2 bg-gray-100 w-fit rounded-lg p-1 border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition-all">
                                                 <button onClick={() => onUpdateQuantity(product.product_no, -1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
                                                     <Minus className="w-3 h-3" />
                                                 </button>
-                                                <span className="w-8 text-center text-sm font-bold text-gray-900">{quantities[product.product_no] || 1}</span>
+                                                <input
+                                                    type="number"
+                                                    value={quantities[product.product_no] || 1}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        if (!isNaN(val)) {
+                                                            onUpdateQuantity(product.product_no, val - (quantities[product.product_no] || 1));
+                                                        }
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        if (isNaN(val) || val < 1) {
+                                                            onUpdateQuantity(product.product_no, 1 - (quantities[product.product_no] || 1));
+                                                        }
+                                                    }}
+                                                    className="w-12 text-center text-sm font-bold text-gray-900 bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                />
                                                 <button onClick={() => onUpdateQuantity(product.product_no, 1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
                                                     <Plus className="w-3 h-3" />
                                                 </button>
