@@ -13,8 +13,8 @@ export async function GET(request: Request) {
   const type = searchParams.get('type'); // 'quote' for 견적서 products only
 
   try {
-    // For quote type, fetch products from registered quote categories
-    if (type === 'quote') {
+    // For quote or price type, fetch products from registered quote categories
+    if (type === 'quote' || type === 'price') {
       const categoryNos = category ? [Number(category)] : QUOTE_CATEGORY_NOS;
 
       // Fetch products from each quote category

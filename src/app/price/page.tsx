@@ -1,6 +1,6 @@
 import QuoteCatalog from '@/components/QuoteCatalog';
 
-export default function QuotePage() {
+export default function PricePage() {
     return (
         <main className="min-h-screen bg-background relative overflow-hidden">
             {/* Decorative Background */}
@@ -10,12 +10,12 @@ export default function QuotePage() {
             </div>
 
             <div className="relative z-10 py-12">
-                <QuoteCatalog mode="quote" />
+                <QuoteCatalog mode="price" />
             </div>
 
             <footer className="relative z-10 py-12 border-t border-border mt-20">
                 <div className="max-w-6xl mx-auto px-6 text-center text-sm text-muted-foreground">
-                    © 2025 Cafe24 Integrated Catalog. Built for professional e-commerce management.
+                    © 2025 Cafe24 Integrated Catalog. Real-time Price List Service.
                 </div>
             </footer>
         </main>

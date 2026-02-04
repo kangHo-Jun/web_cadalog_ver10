@@ -59,7 +59,11 @@ const fetcher = async (url: string) => {
     return res.json();
 };
 
-export default function QuoteCatalog() {
+interface QuoteCatalogProps {
+    mode?: 'quote' | 'price';
+}
+
+export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -102,7 +106,7 @@ export default function QuoteCatalog() {
     }, [catData]);
 
     // Fetch quote products only
-    const productKey = `/api/products?type=quote&keyword=${debouncedSearch}&category=${selectedCategory || ''}`;
+    const productKey = `/api/products?type=${mode}&keyword=${debouncedSearch}&category=${selectedCategory || ''}`;
     const { data: prodData, error: prodError, isLoading: prodLoading, isValidating } = useSWR(
         productKey,
         fetcher,
@@ -214,7 +218,7 @@ export default function QuoteCatalog() {
         <div className="w-full max-w-6xl mx-auto p-6 space-y-8 animate-in bg-white min-h-screen">
             <div className="text-center mb-10">
                 <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">
-                    견적 문의
+                    {mode === 'quote' ? '견적 문의' : '실시간 가격표'}
                 </h1>
                 {isValidating && (
                     <div className="flex items-center justify-center gap-2 text-xs text-blue-500 mt-4 animate-pulse">
@@ -244,6 +248,7 @@ export default function QuoteCatalog() {
                 cartItemIds={cart.map(item => item.product.product_no)}
                 onUpdateQuantity={updateQuantity}
                 onAddToCart={addToCart}
+                showActions={mode === 'quote'}
             />
 
             {/* Pagination */}

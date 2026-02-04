@@ -18,6 +18,7 @@ interface ProductListProps {
     cartItemIds: number[];
     onUpdateQuantity: (id: number, delta: number, absolute?: number) => void;
     onAddToCart: (product: Product) => void;
+    showActions?: boolean;
 }
 
 const ProductList: React.FC<ProductListProps> = ({
@@ -27,7 +28,8 @@ const ProductList: React.FC<ProductListProps> = ({
     quantities,
     cartItemIds,
     onUpdateQuantity,
-    onAddToCart
+    onAddToCart,
+    showActions = true
 }) => {
     if (loading) {
         return (
@@ -55,8 +57,8 @@ const ProductList: React.FC<ProductListProps> = ({
                             <th className="px-6 py-4 font-semibold text-sm text-gray-700">상품정보</th>
                             <th className="px-6 py-4 font-semibold text-sm text-gray-700">상품코드</th>
                             <th className="px-6 py-4 font-semibold text-sm text-gray-700">가격</th>
-                            <th className="px-6 py-4 font-semibold text-sm text-gray-700">수량 선택</th>
-                            <th className="px-6 py-4 font-semibold text-sm text-gray-700 text-right">견적 담기</th>
+                            {showActions && <th className="px-6 py-4 font-semibold text-sm text-gray-700">수량 선택</th>}
+                            {showActions && <th className="px-6 py-4 font-semibold text-sm text-gray-700 text-right">견적 담기</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -83,41 +85,45 @@ const ProductList: React.FC<ProductListProps> = ({
                                         <td className="px-6 py-4 font-bold text-gray-900 whitespace-nowrap">
                                             {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(Number(product.price))}
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 bg-gray-100 w-fit rounded-lg p-1 border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition-all">
-                                                <button onClick={() => onUpdateQuantity(product.product_no, -1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
-                                                    <Minus className="w-3 h-3" />
+                                        {showActions && (
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2 bg-gray-100 w-fit rounded-lg p-1 border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition-all">
+                                                    <button onClick={() => onUpdateQuantity(product.product_no, -1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
+                                                        <Minus className="w-3 h-3" />
+                                                    </button>
+                                                    <input
+                                                        type="number"
+                                                        value={quantities[product.product_no] === 0 ? '' : (quantities[product.product_no] || 1)}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                                            if (!isNaN(val)) {
+                                                                onUpdateQuantity(product.product_no, 0, val);
+                                                            }
+                                                        }}
+                                                        onFocus={(e) => e.target.select()}
+                                                        onBlur={(e) => {
+                                                            const val = parseInt(e.target.value);
+                                                            if (isNaN(val) || val < 1) {
+                                                                onUpdateQuantity(product.product_no, 0, 1);
+                                                            }
+                                                        }}
+                                                        className="w-12 text-center text-sm font-bold text-gray-900 bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        placeholder="1"
+                                                    />
+                                                    <button onClick={() => onUpdateQuantity(product.product_no, 1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        )}
+                                        {showActions && (
+                                            <td className="px-6 py-4 text-right">
+                                                <button onClick={() => onAddToCart(product)} className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95", isInCart ? "bg-green-600 hover:bg-green-700 text-white" : "bg-orange-500 hover:bg-orange-600 text-white")}>
+                                                    <Plus className="w-4 h-4" />
+                                                    {isInCart ? '추가 담기' : '견적 담기'}
                                                 </button>
-                                                <input
-                                                    type="number"
-                                                    value={quantities[product.product_no] === 0 ? '' : (quantities[product.product_no] || 1)}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                                                        if (!isNaN(val)) {
-                                                            onUpdateQuantity(product.product_no, 0, val);
-                                                        }
-                                                    }}
-                                                    onFocus={(e) => e.target.select()}
-                                                    onBlur={(e) => {
-                                                        const val = parseInt(e.target.value);
-                                                        if (isNaN(val) || val < 1) {
-                                                            onUpdateQuantity(product.product_no, 0, 1);
-                                                        }
-                                                    }}
-                                                    className="w-12 text-center text-sm font-bold text-gray-900 bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                    placeholder="1"
-                                                />
-                                                <button onClick={() => onUpdateQuantity(product.product_no, 1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
-                                                    <Plus className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button onClick={() => onAddToCart(product)} className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95", isInCart ? "bg-green-600 hover:bg-green-700 text-white" : "bg-orange-500 hover:bg-orange-600 text-white")}>
-                                                <Plus className="w-4 h-4" />
-                                                {isInCart ? '추가 담기' : '견적 담기'}
-                                            </button>
-                                        </td>
+                                            </td>
+                                        )}
                                     </tr>
                                 );
                             })
