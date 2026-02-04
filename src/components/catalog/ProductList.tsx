@@ -97,6 +97,7 @@ const ProductList: React.FC<ProductListProps> = ({
                                                             onUpdateQuantity(product.product_no, 0, val);
                                                         }
                                                     }}
+                                                    onFocus={(e) => e.target.select()}
                                                     onBlur={(e) => {
                                                         const val = parseInt(e.target.value);
                                                         if (isNaN(val) || val < 1) {
