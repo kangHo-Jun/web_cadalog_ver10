@@ -26,13 +26,36 @@ export const QUOTE_CATEGORIES: QuoteCategory[] = [
     display_name: '석고보드',
     category_depth: 1,
   },
-  // 새로운 견적서 카테고리를 여기에 추가하세요
-  // {
-  //   category_no: 327,
-  //   category_name: '카테고리명(견적서)',
-  //   display_name: '카테고리명',
-  //   category_depth: 1,
-  // },
+  {
+    category_no: 327,
+    category_name: '각재/목재(견적서)',
+    display_name: '각재/목재',
+    category_depth: 1,
+  },
+  {
+    category_no: 328,
+    category_name: '합판/MDF(견적서)',
+    display_name: '합판/MDF',
+    category_depth: 1,
+  },
+  {
+    category_no: 329,
+    category_name: '방부목/데크(견적서)',
+    display_name: '방부목/데크',
+    category_depth: 1,
+  },
+  {
+    category_no: 330,
+    category_name: '집성목/계단(견적서)',
+    display_name: '집성목/계단',
+    category_depth: 1,
+  },
+  {
+    category_no: 331,
+    category_name: '철물/부자재(견적서)',
+    display_name: '철물/부자재',
+    category_depth: 1,
+  },
 ];
 
 // 카테고리 번호 배열 (API 호출용)

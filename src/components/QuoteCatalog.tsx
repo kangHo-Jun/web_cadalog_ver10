@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
+import { RefreshCw } from 'lucide-react';
 
 // Sub-components
 import CatalogHeader from './catalog/CatalogHeader';
@@ -211,9 +212,16 @@ export default function QuoteCatalog() {
 
     return (
         <div className="w-full max-w-6xl mx-auto p-6 space-y-8 animate-in bg-white min-h-screen">
-            <div className="text-center mb-6">
-                <h1 className="text-3xl font-bold text-foreground mb-2">견적서 전용 카탈로그</h1>
-                <p className="text-muted-foreground">견적서 작성을 위한 상품 목록입니다</p>
+            <div className="text-center mb-10">
+                <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3">
+                    견적 문의
+                </h1>
+                {isValidating && (
+                    <div className="flex items-center justify-center gap-2 text-xs text-blue-500 mt-4 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>실시간 최신 정보 동기화 중...</span>
+                    </div>
+                )}
             </div>
 
             <CatalogHeader
