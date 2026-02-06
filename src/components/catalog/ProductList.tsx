@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Loader2, Plus, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +31,14 @@ const ProductList: React.FC<ProductListProps> = ({
     onAddToCart,
     showActions = true
 }) => {
+    const [overlayProduct, setOverlayProduct] = useState<Product | null>(null);
+
+    const handleRowClick = (product: Product, event: React.MouseEvent<HTMLTableRowElement>) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button, input, a')) return;
+        setOverlayProduct(product);
+    };
+
     if (loading) {
         return (
             <div className="bg-white rounded-2xl border border-gray-200 p-20 text-center shadow-sm">
@@ -66,7 +74,11 @@ const ProductList: React.FC<ProductListProps> = ({
                             products.map((product) => {
                                 const isInCart = cartItemIds.includes(product.product_no);
                                 return (
-                                    <tr key={product.product_no} className={cn("hover:bg-blue-50/50 transition-colors group", isInCart && "bg-green-50")}>
+                                    <tr
+                                        key={product.product_no}
+                                        className={cn("hover:bg-blue-50/50 transition-colors group", isInCart && "bg-green-50")}
+                                        onClick={(event) => handleRowClick(product, event)}
+                                    >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-200">
@@ -135,6 +147,38 @@ const ProductList: React.FC<ProductListProps> = ({
                     </tbody>
                 </table>
             </div>
+            {overlayProduct && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-6">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-gray-200 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="text-lg font-semibold text-gray-900">
+                                <span dangerouslySetInnerHTML={{ __html: overlayProduct.product_name }} />
+                            </div>
+                            <button
+                                onClick={() => setOverlayProduct(null)}
+                                className="text-sm text-gray-500 hover:text-gray-700"
+                            >
+                                닫기
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="w-20 h-20 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-200">
+                                {overlayProduct.detail_image ? (
+                                    <img src={overlayProduct.detail_image} alt={overlayProduct.product_name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">이미지</div>
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <div className="text-sm text-gray-600">상품코드: {overlayProduct.product_code}</div>
+                                <div className="text-base font-bold text-gray-900">
+                                    {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(Number(overlayProduct.price))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
