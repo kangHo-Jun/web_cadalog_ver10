@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Loader2, Plus, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,12 +31,39 @@ const ProductList: React.FC<ProductListProps> = ({
     onAddToCart,
     showActions = true
 }) => {
-    const [overlayProduct, setOverlayProduct] = useState<Product | null>(null);
+    const [overlayGroupKey, setOverlayGroupKey] = useState<string | null>(null);
+
+    const getGroupKey = (product: Product): string => {
+        if (product.product_code && product.product_code.length > 1) {
+            return product.product_code.slice(0, -1);
+        }
+        return String(product.product_no);
+    };
+
+    const groupedProducts = useMemo(() => {
+        const map = new Map<string, Product[]>();
+        const representatives: Product[] = [];
+
+        products.forEach((product) => {
+            const key = getGroupKey(product);
+            if (!map.has(key)) {
+                map.set(key, []);
+                representatives.push(product);
+            }
+            map.get(key)?.push(product);
+        });
+
+        return { map, representatives };
+    }, [products]);
+
+    const overlayProducts = overlayGroupKey
+        ? groupedProducts.map.get(overlayGroupKey) || []
+        : [];
 
     const handleRowClick = (product: Product, event: React.MouseEvent<HTMLTableRowElement>) => {
         const target = event.target as HTMLElement;
         if (target.closest('button, input, a')) return;
-        setOverlayProduct(product);
+        setOverlayGroupKey(getGroupKey(product));
     };
 
     if (loading) {
@@ -70,8 +97,8 @@ const ProductList: React.FC<ProductListProps> = ({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {products.length > 0 ? (
-                            products.map((product) => {
+                        {groupedProducts.representatives.length > 0 ? (
+                            groupedProducts.representatives.map((product) => {
                                 const isInCart = cartItemIds.includes(product.product_no);
                                 return (
                                     <tr
@@ -130,9 +157,13 @@ const ProductList: React.FC<ProductListProps> = ({
                                         )}
                                         {showActions && (
                                             <td className="px-6 py-4 text-right">
-                                                <button onClick={() => onAddToCart(product)} className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95", isInCart ? "bg-green-600 hover:bg-green-700 text-white" : "bg-orange-500 hover:bg-orange-600 text-white")}>
+                                                <button
+                                                    onClick={() => onAddToCart(product)}
+                                                    aria-label="견적 담기"
+                                                    className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95", isInCart ? "bg-green-600 hover:bg-green-700 text-white" : "bg-orange-500 hover:bg-orange-600 text-white")}
+                                                >
                                                     <Plus className="w-4 h-4" />
-                                                    {isInCart ? '추가 담기' : '견적 담기'}
+                                                    {isInCart ? '견적 추가 담기' : '견적 담기'}
                                                 </button>
                                             </td>
                                         )}
@@ -147,34 +178,79 @@ const ProductList: React.FC<ProductListProps> = ({
                     </tbody>
                 </table>
             </div>
-            {overlayProduct && (
+            {overlayGroupKey && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-6">
-                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-gray-200 p-6">
+                    <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl border border-gray-200 p-6">
                         <div className="flex items-center justify-between mb-4">
-                            <div className="text-lg font-semibold text-gray-900">
-                                <span dangerouslySetInnerHTML={{ __html: overlayProduct.product_name }} />
-                            </div>
+                            <div className="text-lg font-semibold text-gray-900">옵션</div>
                             <button
-                                onClick={() => setOverlayProduct(null)}
+                                onClick={() => setOverlayGroupKey(null)}
                                 className="text-sm text-gray-500 hover:text-gray-700"
                             >
                                 닫기
                             </button>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <div className="w-20 h-20 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-200">
-                                {overlayProduct.detail_image ? (
-                                    <img src={overlayProduct.detail_image} alt={overlayProduct.product_name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">이미지</div>
-                                )}
-                            </div>
-                            <div className="space-y-2">
-                                <div className="text-sm text-gray-600">상품코드: {overlayProduct.product_code}</div>
-                                <div className="text-base font-bold text-gray-900">
-                                    {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(Number(overlayProduct.price))}
-                                </div>
-                            </div>
+                        <div className="space-y-4">
+                            {overlayProducts.map((product) => {
+                                const isInCart = cartItemIds.includes(product.product_no);
+                                return (
+                                    <div key={product.product_no} className="flex items-center justify-between gap-4 border border-gray-200 rounded-xl p-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-200">
+                                                {product.detail_image ? (
+                                                    <img src={product.detail_image} alt={product.product_name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">이미지</div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-semibold text-gray-900">
+                                                    <span dangerouslySetInnerHTML={{ __html: product.product_name }} />
+                                                </div>
+                                                <div className="text-xs text-gray-500">{product.product_code}</div>
+                                                <div className="text-sm font-bold text-gray-900">
+                                                    {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(Number(product.price))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {showActions && (
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2 bg-gray-100 w-fit rounded-lg p-1 border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition-all">
+                                                    <button onClick={() => onUpdateQuantity(product.product_no, -1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
+                                                        <Minus className="w-3 h-3" />
+                                                    </button>
+                                                    <input
+                                                        type="number"
+                                                        value={quantities[product.product_no] === 0 ? '' : (quantities[product.product_no] || 1)}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                                            if (!isNaN(val)) {
+                                                                onUpdateQuantity(product.product_no, 0, val);
+                                                            }
+                                                        }}
+                                                        onFocus={(e) => e.target.select()}
+                                                        onBlur={(e) => {
+                                                            const val = parseInt(e.target.value);
+                                                            if (isNaN(val) || val < 1) {
+                                                                onUpdateQuantity(product.product_no, 0, 1);
+                                                            }
+                                                        }}
+                                                        className="w-12 text-center text-sm font-bold text-gray-900 bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        placeholder="1"
+                                                    />
+                                                    <button onClick={() => onUpdateQuantity(product.product_no, 1)} className="p-1.5 hover:bg-white rounded transition-colors text-gray-600">
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                                <button onClick={() => onAddToCart(product)} className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm active:scale-95", isInCart ? "bg-green-600 hover:bg-green-700 text-white" : "bg-orange-500 hover:bg-orange-600 text-white")}>
+                                                    <Plus className="w-4 h-4" />
+                                                    {isInCart ? '추가 담기' : '견적 담기'}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
