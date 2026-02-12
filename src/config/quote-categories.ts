@@ -23,8 +23,8 @@ export const QUOTE_CATEGORIES: QuoteCategory[] = [
     parent_category_no: null,
   },
   {
-    category_no: 326,
-    category_name: '석고보드(견적서)',
+    category_no: 50,
+    category_name: '석고보드',
     display_name: '석고보드',
     category_depth: 1,
     parent_category_no: null,

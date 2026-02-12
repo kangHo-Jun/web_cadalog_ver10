@@ -1,0 +1,26 @@
+{
+  "t1": {
+    "chipCount": 2,
+    "chipTexts": [
+      "소송",
+      "뉴송"
+    ]
+  },
+  "t2_click": {
+    "clicked": true,
+    "chipText": "소송"
+  },
+  "t2": {
+    "lastProductsUrl": "/api/products?type=quote&keyword=&category=332",
+    "categoryParam": "332"
+  },
+  "t3": {
+    "remainingChipCount": 0,
+    "remainingChipTexts": []
+  },
+  "screenshots": [
+    "test/T1_327_mid_chips.png",
+    "test/T2_subcategory_single_category_no.png",
+    "test/T3_switch_root_clear_chips.png"
+  ]
+}

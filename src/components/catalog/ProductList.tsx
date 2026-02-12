@@ -179,8 +179,8 @@ const ProductList: React.FC<ProductListProps> = ({
                 </table>
             </div>
             {overlayGroupKey && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-6">
-                    <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl border border-gray-200 p-6">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-2xl backdrop-saturate-150 backdrop-brightness-110 p-6">
+                    <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-gray-200/80 p-6">
                         <div className="flex items-center justify-between mb-4">
                             <div className="text-lg font-semibold text-gray-900">옵션</div>
                             <button

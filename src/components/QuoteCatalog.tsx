@@ -412,6 +412,19 @@ export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
     );
 
     const allProducts = prodData?.products || [];
+    const selectedRoot = QUOTE_CATEGORIES.find(
+        cat =>
+            cat.category_no === selectedCategory &&
+            (cat.parent_category_no === null || cat.parent_category_no === undefined)
+    );
+    const selectedSub = QUOTE_CATEGORIES.find(
+        cat => cat.category_no === selectedSubCategory
+    );
+    const statusSummary = [
+        `대분류: ${selectedRoot?.display_name ?? '-'}`,
+        `중분류: ${selectedSub?.display_name ?? '-'}`,
+        `검색: ${search.trim() || '-'}`,
+    ].join(' / ');
 
     // Pagination logic
     const totalPages = Math.ceil(allProducts.length / ITEMS_PER_PAGE);
@@ -527,6 +540,9 @@ export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
                 onSearchChange={setSearch}
                 isValidating={isValidating}
             />
+            <div className="text-center text-sm text-muted-foreground">
+                {statusSummary}
+            </div>
 
             {/* Google Style Category Filtering UI (Phase 1) */}
             <CategorySection
@@ -548,6 +564,11 @@ export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
                 onAddToCart={addToCart}
                 showActions={mode === 'quote'}
             />
+            {(prodLoading || isValidating) && (
+                <div className="text-center text-xs text-muted-foreground">
+                    실시간 데이터를 불러오는 중...
+                </div>
+            )}
 
             {/* Pagination */}
             {!prodLoading && !prodError && allProducts.length > 0 && (
