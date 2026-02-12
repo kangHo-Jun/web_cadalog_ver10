@@ -16,8 +16,8 @@ export interface QuoteCategory {
 
 export const QUOTE_CATEGORIES: QuoteCategory[] = [
   {
-    category_no: 325,
-    category_name: '단열재(견적서)',
+    category_no: 26,
+    category_name: '단열재',
     display_name: '단열재',
     category_depth: 1,
     parent_category_no: null,
