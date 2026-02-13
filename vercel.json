@@ -1,0 +1,9 @@
+cat <<EOF > vercel.json
+{
+  "crons": [{
+    "path": "/api/cron/sync-products",
+    "schedule": "* * * * *"
+  }]
+}
+EOF
+
