@@ -1,0 +1,124 @@
+{
+  "generated_at": "2026-02-13T00:34:32.151Z",
+  "phase": "phase1",
+  "categories": [
+    325,
+    326,
+    327,
+    328,
+    329,
+    330,
+    331,
+    332,
+    333
+  ],
+  "results": [
+    {
+      "timestamp": "2026-02-13T00:34:32.028Z",
+      "category_no": 325,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.139Z",
+      "category_no": 326,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.141Z",
+      "category_no": 327,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.143Z",
+      "category_no": 328,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.145Z",
+      "category_no": 329,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.146Z",
+      "category_no": 330,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.147Z",
+      "category_no": 331,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.148Z",
+      "category_no": 332,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    },
+    {
+      "timestamp": "2026-02-13T00:34:32.149Z",
+      "category_no": 333,
+      "success": false,
+      "http_status": null,
+      "product_count": null,
+      "products_array_exists": false,
+      "variants_included": false,
+      "output_file": null,
+      "error": "fetch failed"
+    }
+  ],
+  "tests": {
+    "test_1_call_records_exist_for_325_333": true,
+    "test_2_products_array_presence_recorded": true,
+    "test_3_variants_presence_recorded": true,
+    "test_4_missing_categories_zero": true,
+    "test_5_no_processing_grouping_snapshot_ui_fields": true,
+    "missing_categories": []
+  }
+}
