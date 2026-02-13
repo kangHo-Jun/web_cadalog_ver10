@@ -1,0 +1,17 @@
+{
+  "shop_no": 1,
+  "variant_code": "P0000CNJ000A",
+  "options": null,
+  "custom_variant_code": "",
+  "display": "T",
+  "selling": "T",
+  "display_order": null,
+  "additional_amount": "0.00",
+  "use_inventory": "F",
+  "important_inventory": "A",
+  "inventory_control_type": "A",
+  "display_soldout": "F",
+  "quantity": 0,
+  "safety_inventory": 0,
+  "image": ""
+}
