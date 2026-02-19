@@ -6,6 +6,7 @@ export interface Tokens {
     access_token: string;
     refresh_token: string;
     expires_at?: number;
+    refresh_token_expires_at?: number; // Unix ms — used for expiry alert cron
 }
 
 // Redis 클라이언트 생성 (싱글톤 패턴)
@@ -31,7 +32,7 @@ export async function getTokens(): Promise<Tokens> {
     try {
         const client = await getRedisClient();
         const data = await client.get(TOKEN_KEY);
-        
+
         if (data) {
             const tokens = JSON.parse(data) as Tokens;
             console.log('✅ Tokens retrieved from Redis');

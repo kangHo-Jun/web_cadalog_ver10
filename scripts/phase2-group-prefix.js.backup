@@ -35,7 +35,7 @@ function groupByVariantPrefix(products, categoryNo) {
   for (const product of products) {
     const variants = Array.isArray(product?.variants) ? product.variants : [];
     for (const variant of variants) {
-      const variantCode = typeof variant?.product_code === 'string' ? variant.product_code : '';
+      const variantCode = typeof variant?.variant_code === 'string' ? variant.variant_code : '';
       if (!variantCode || variantCode.length < 8) continue;
       const prefix = variantCode.slice(0, 8);
 
@@ -72,7 +72,7 @@ function evaluateTests(meta, grouped, missingCategories, rawFilesBefore, rawFile
   return {
     test_1_category_325_333_processed: hasAllCategoryRecords,
     test_2_group_result_created_separately: recordsContainGroupingField,
-    test_3_grouping_uses_product_code_prefix_8: allGroupsArePrefix8,
+    test_3_grouping_uses_variant_code_prefix_8: allGroupsArePrefix8,
     test_4_missing_categories_zero: noMissingCategory,
     test_5_raw_json_not_modified: rawUnchanged,
   };

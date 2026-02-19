@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-13T00:34:32.151Z",
+  "generated_at": "2026-02-13T07:58:10.953Z",
   "phase": "phase1",
   "categories": [
     325,
@@ -14,103 +14,94 @@
   ],
   "results": [
     {
-      "timestamp": "2026-02-13T00:34:32.028Z",
+      "timestamp": "2026-02-13T07:58:09.871Z",
       "category_no": 325,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-325.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.139Z",
+      "timestamp": "2026-02-13T07:58:10.085Z",
       "category_no": 326,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-326.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.141Z",
+      "timestamp": "2026-02-13T07:58:10.339Z",
       "category_no": 327,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-327.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.143Z",
+      "timestamp": "2026-02-13T07:58:10.403Z",
       "category_no": 328,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-328.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.145Z",
+      "timestamp": "2026-02-13T07:58:10.469Z",
       "category_no": 329,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-329.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.146Z",
+      "timestamp": "2026-02-13T07:58:10.559Z",
       "category_no": 330,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-330.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.147Z",
+      "timestamp": "2026-02-13T07:58:10.619Z",
       "category_no": 331,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-331.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.148Z",
+      "timestamp": "2026-02-13T07:58:10.774Z",
       "category_no": 332,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-332.json"
     },
     {
-      "timestamp": "2026-02-13T00:34:32.149Z",
+      "timestamp": "2026-02-13T07:58:10.856Z",
       "category_no": 333,
       "success": false,
-      "http_status": null,
+      "http_status": 401,
       "product_count": null,
       "products_array_exists": false,
       "variants_included": false,
-      "output_file": null,
-      "error": "fetch failed"
+      "output_file": "test/phase1_raw/category-333.json"
     }
   ],
   "tests": {

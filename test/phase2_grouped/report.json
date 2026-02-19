@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-13T00:36:02.700Z",
+  "generated_at": "2026-02-14T04:30:45.925Z",
   "phase": "phase2",
   "categories": [
     325,
@@ -14,104 +14,94 @@
   ],
   "meta": [
     {
-      "timestamp": "2026-02-13T00:36:02.697Z",
+      "timestamp": "2026-02-14T04:30:45.914Z",
       "category_no": 325,
       "source_file": "test/phase1_raw/category-325.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.916Z",
       "category_no": 326,
       "source_file": "test/phase1_raw/category-326.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.916Z",
       "category_no": 327,
       "source_file": "test/phase1_raw/category-327.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.919Z",
       "category_no": 328,
       "source_file": "test/phase1_raw/category-328.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.920Z",
       "category_no": 329,
       "source_file": "test/phase1_raw/category-329.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.923Z",
       "category_no": 330,
       "source_file": "test/phase1_raw/category-330.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.924Z",
       "category_no": 331,
       "source_file": "test/phase1_raw/category-331.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.924Z",
       "category_no": 332,
       "source_file": "test/phase1_raw/category-332.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     },
     {
-      "timestamp": "2026-02-13T00:36:02.699Z",
+      "timestamp": "2026-02-14T04:30:45.924Z",
       "category_no": 333,
       "source_file": "test/phase1_raw/category-333.json",
-      "source_exists": false,
-      "products_array_exists": false,
+      "source_exists": true,
+      "products_array_exists": true,
       "variants_array_exists": false,
       "group_count": 0
     }
   ],
-  "missing_categories": [
-    325,
-    326,
-    327,
-    328,
-    329,
-    330,
-    331,
-    332,
-    333
-  ],
+  "missing_categories": [],
   "grouped_file": "test/phase2_grouped/grouped-by-prefix.json",
   "tests": {
     "test_1_category_325_333_processed": true,
     "test_2_group_result_created_separately": true,
-    "test_3_grouping_uses_variant_code_prefix_8": true,
-    "test_4_missing_categories_zero": false,
+    "test_3_grouping_uses_product_code_prefix_8": true,
+    "test_4_missing_categories_zero": true,
     "test_5_raw_json_not_modified": true
   }
 }

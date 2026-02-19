@@ -34,6 +34,10 @@ export async function refreshAccessToken() {
             access_token: response.data.access_token,
             refresh_token: response.data.refresh_token,
             expires_at: Date.now() + 2 * 60 * 60 * 1000, // 2 hours
+            // Parse ISO string from Cafe24 API (e.g. "2026-03-05T08:26:51.000")
+            refresh_token_expires_at: response.data.refresh_token_expires_at
+                ? new Date(response.data.refresh_token_expires_at).getTime()
+                : Date.now() + 14 * 24 * 60 * 60 * 1000, // fallback: 14 days
         };
 
         await saveTokens(newTokens);

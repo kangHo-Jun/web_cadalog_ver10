@@ -1,15 +1,17 @@
 {
-  "generated_at": "2026-02-13T00:38:47.614Z",
+  "generated_at": "2026-02-13T07:58:11.749Z",
   "phase": "phase3",
   "key": "catalog:snapshot:v1",
   "input_file": "test/phase2_grouped/grouped-by-prefix.json",
-  "redis_url_exists": false,
+  "redis_url_exists": true,
   "tests": {
     "test_1_phase2_group_result_exists": true,
-    "test_2_redis_connection_success": false,
-    "test_3_snapshot_key_set_success": false,
-    "test_4_ttl_not_set": false,
-    "test_5_readback_equals_source": false
+    "test_2_redis_connection_success": true,
+    "test_3_snapshot_key_set_success": true,
+    "test_4_ttl_not_set": true,
+    "test_5_readback_equals_source": true
   },
-  "error": "Missing KV_REDIS_URL"
+  "error": null,
+  "ttl": -1,
+  "readback_size": 2
 }
