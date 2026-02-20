@@ -44,6 +44,6 @@ export interface GroupedProduct {
     id: string;             // 부모 코드 (product_code 또는 variant_code 앞 8자리)
     parentName: string;     // 정규화된 부모 상품명 (HTML 제거, 절삭 없음)
     detail_image?: string;  // 대표 이미지 URL
-    categoryNo?: number;    // 카테고리 번호
+    categoryNo?: number[];   // 소속 카테고리 번호 목록
     children: ChildItem[];  // 옵션값 기반 자식 리스트
 }

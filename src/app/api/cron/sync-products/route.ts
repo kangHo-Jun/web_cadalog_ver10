@@ -36,7 +36,13 @@ export async function GET() {
       const parentCode = product.product_code;
       if (!parentCode) continue;
 
-      if (grouped[parentCode]) continue;
+      if (grouped[parentCode]) {
+        const catNo = product._categoryNo || 0;
+        if (!grouped[parentCode].categoryNo!.includes(catNo)) {
+          grouped[parentCode].categoryNo!.push(catNo);
+        }
+        continue;
+      }
 
       const parentName = normalizeProductName(product.product_name);
       const detail_image = product.detail_image || '';
@@ -73,7 +79,7 @@ export async function GET() {
         id: parentCode,
         parentName,
         detail_image,
-        categoryNo: product._categoryNo || 0,
+        categoryNo: [product._categoryNo || 0],
         children
       };
     }

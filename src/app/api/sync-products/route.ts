@@ -40,8 +40,14 @@ export async function GET() {
       const parentCode = product.product_code;
       if (!parentCode) continue;
 
-      // 부모가 이미 등록된 경우 스킵 (중복 방지)
-      if (grouped[parentCode]) continue;
+      // 부모가 이미 등록된 경우 카테고리만 추가
+      if (grouped[parentCode]) {
+        const catNo = product._categoryNo || 0;
+        if (!grouped[parentCode].categoryNo!.includes(catNo)) {
+          grouped[parentCode].categoryNo!.push(catNo);
+        }
+        continue;
+      }
 
       // 1. 부모 상품명: HTML 태그만 제거, 절삭 없음
       const parentName = normalizeProductName(product.product_name);
@@ -85,7 +91,7 @@ export async function GET() {
         id: parentCode,
         parentName,
         detail_image,
-        categoryNo: product._categoryNo || 0,
+        categoryNo: [product._categoryNo || 0],
         children
       };
     }

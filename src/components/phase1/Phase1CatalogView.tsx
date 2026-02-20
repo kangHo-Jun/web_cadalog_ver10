@@ -63,7 +63,7 @@ export default function Phase1CatalogView() {
         if (!data) return [];
         const allGroups: GroupedProduct[] = Object.values(data);
         return allGroups.filter((group) => {
-            if (selectedCategory && group.categoryNo !== selectedCategory) return false;
+            if (selectedCategory && !group.categoryNo?.includes(selectedCategory)) return false;
             if (debouncedSearch && !group.parentName.toLowerCase().includes(debouncedSearch.toLowerCase())) return false;
             return true;
         });
