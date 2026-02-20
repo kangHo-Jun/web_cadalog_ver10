@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Loader2, Plus, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizeProductName } from '@/lib/product-utils';
 
 interface Product {
     product_no: number;
@@ -116,7 +117,7 @@ const ProductList: React.FC<ProductListProps> = ({
                                                     )}
                                                 </div>
                                                 <span className="font-semibold text-sm text-gray-900 group-hover:text-blue-600 transition-colors">
-                                                    <span dangerouslySetInnerHTML={{ __html: product.product_name }} />
+                                                    {normalizeProductName(product.product_name)}
                                                 </span>
                                             </div>
                                         </td>
@@ -205,7 +206,7 @@ const ProductList: React.FC<ProductListProps> = ({
                                             </div>
                                             <div>
                                                 <div className="text-sm font-semibold text-gray-900">
-                                                    <span dangerouslySetInnerHTML={{ __html: product.product_name }} />
+                                                    {normalizeProductName(product.product_name)}
                                                 </div>
                                                 <div className="text-xs text-gray-500">{product.product_code}</div>
                                                 <div className="text-sm font-bold text-gray-900">

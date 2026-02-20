@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
 import { RefreshCw } from 'lucide-react';
+import { normalizeProductName } from '@/lib/product-utils';
 
 // Sub-components
 import CatalogHeader from './catalog/CatalogHeader';
@@ -503,7 +504,7 @@ export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
             customer: formData,
             items: cart.map(item => ({
                 product_no: item.product.product_no,
-                product_name: item.product.product_name.replace(/<[^>]*>/g, ''),
+                product_name: normalizeProductName(item.product.product_name),
                 product_code: item.product.product_code,
                 price: item.product.price,
                 quantity: item.quantity,

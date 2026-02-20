@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
 import StickySearchHeader from './StickySearchHeader';
@@ -9,6 +9,7 @@ import ProductListPhase1 from './ProductListPhase1';
 import CartDrawer from './CartDrawer';
 import { useCartStore } from '@/store/useCartStore';
 import { log, trackMetric } from '@/lib/logger';
+import { GroupedProduct } from '@/lib/product-utils';
 
 const fetcher = (url: string) =>
     fetch(url).then((res) => {
@@ -37,14 +38,12 @@ export default function Phase1CatalogView() {
     const totalAmount = useCartStore((s) => s.totalAmount());
     const clearCart = useCartStore((s) => s.clearCart);
 
-    const categoryParam = selectedCategory ? selectedCategory : '';
-    const productKey = `/api/products?type=quote&keyword=${debouncedSearch}&category=${categoryParam}`;
-
-    const { data, error, isLoading } = useSWR(productKey, fetcher, {
+    // [수정] 데이터 소스: /api/products → /api/debug-snapshot (Redis 스냅샷)
+    const { data, error, isLoading } = useSWR('/api/debug-snapshot', fetcher, {
         revalidateOnFocus: false,
-        dedupingInterval: 2000,
+        dedupingInterval: 60000,
         onError: (err) => {
-            log('error', 'Product fetch failed', { error: err.message, key: productKey });
+            log('error', 'Snapshot fetch failed', { error: err.message });
         }
     });
 
@@ -59,7 +58,16 @@ export default function Phase1CatalogView() {
         }
     }, [debouncedSearch, selectedCategory, data]);
 
-    const products = data?.products || [];
+    // [수정] Redis 스냅샷은 Record<string, GroupedProduct> → Object.values()로 배열 변환 후 필터
+    const groups = useMemo((): GroupedProduct[] => {
+        if (!data) return [];
+        const allGroups: GroupedProduct[] = Object.values(data);
+        return allGroups.filter((group) => {
+            if (selectedCategory && group.categoryNo !== selectedCategory) return false;
+            if (debouncedSearch && !group.parentName.toLowerCase().includes(debouncedSearch.toLowerCase())) return false;
+            return true;
+        });
+    }, [data, selectedCategory, debouncedSearch]);
 
     const handleCategoryChange = (no: number) => {
         const start = performance.now();
@@ -90,11 +98,11 @@ export default function Phase1CatalogView() {
                 <main className="ml-40 flex-1 p-4 pb-24">
                     {/* Product count */}
                     <p className="text-xs text-gray-500 mb-3">
-                        {isLoading ? '불러오는 중...' : `총 ${products.length}개 상품`}
+                        {isLoading ? '불러오는 중...' : `총 ${groups.length}개 상품 그룹`}
                     </p>
 
                     <ProductListPhase1
-                        products={products}
+                        groups={groups}
                         loading={isLoading}
                         error={error}
                     />

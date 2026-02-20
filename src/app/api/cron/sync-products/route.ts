@@ -1,68 +1,107 @@
 import { NextResponse } from 'next/server';
 import { createClient } from 'redis';
 import apiClient from '@/lib/api-client';
+import { normalizeProductName, GroupedProduct, ChildItem } from '@/lib/product-utils';
+import { QUOTE_CATEGORY_NOS } from '@/config/quote-categories';
 
-const CATEGORY_NOS = [325, 326, 327, 328, 329, 330, 331, 332, 333];
+const CATEGORY_NOS = QUOTE_CATEGORY_NOS;
 const SNAPSHOT_KEY = 'catalog:snapshot:v1';
 
 export async function GET() {
   try {
     const allProducts: any[] = [];
-    
+
     for (const catNo of CATEGORY_NOS) {
       const response = await apiClient.get('/products', {
         params: {
           category: catNo,
-          embed: 'variants',
+          embed: 'options,variants',
           limit: 100
         }
       });
-      
+
       if (response.data.products) {
-        allProducts.push(...response.data.products);
+        const productsWithCategory = response.data.products.map((product: any) => ({
+          ...product,
+          _categoryNo: catNo
+        }));
+        allProducts.push(...productsWithCategory);
       }
     }
-    
-    const grouped: Record<string, any> = {};
-    
+
+    const grouped: Record<string, GroupedProduct> = {};
+
     for (const product of allProducts) {
-      if (product.variants && product.variants.length > 0) {
-        for (const variant of product.variants) {
-          const variantCode = variant.variant_code;
-          if (variantCode && variantCode.length >= 8) {
-            const parentCode = variantCode.substring(0, 8);
-            
-            if (!grouped[parentCode]) {
-              grouped[parentCode] = {
-                parentName: product.product_name,
-                children: []
-              };
-            }
-            
-            grouped[parentCode].children.push({
-              variantCode: variantCode,
-              variantName: variant.variant_name || '',
-              price: variant.additional_amount || '0'
-            });
-          }
-        }
+      const parentCode = product.product_code;
+      if (!parentCode) continue;
+
+      if (grouped[parentCode]) continue;
+
+      const parentName = normalizeProductName(product.product_name);
+      const detail_image = product.detail_image || '';
+
+      let children: ChildItem[] = [];
+
+      if (product.options?.has_option === 'T') {
+        const optionsList = product.options?.options;
+        const optionValues: any[] = optionsList?.[0]?.option_value || [];
+        const variants: any[] = product.variants || [];
+
+        children = optionValues.map((ov: any) => {
+          const name = ov.value || ov.option_text || '';
+          const matchedVariant = variants.find((v: any) =>
+            v.options?.some((o: any) => o.value === name)
+          );
+
+          const additionalAmount = Number(matchedVariant?.additional_amount || 0);
+          const basePrice = Number(product.price || 0);
+          const price = basePrice + additionalAmount;
+          const variantCode = matchedVariant?.variant_code || '';
+
+          return { name, price, variantCode };
+        }).filter((child: ChildItem) => child.name);
+      } else {
+        children = [{
+          name: parentName,
+          price: Number(product.price || 0),
+          isSingle: true
+        }];
       }
+
+      grouped[parentCode] = {
+        id: parentCode,
+        parentName,
+        detail_image,
+        categoryNo: product._categoryNo || 0,
+        children
+      };
     }
-    
+
     const client = createClient({ url: process.env.KV_REDIS_URL });
     await client.connect();
     await client.set(SNAPSHOT_KEY, JSON.stringify(grouped));
     await client.quit();
-    
-    return NextResponse.json({ 
-      success: true, 
-      products: Object.keys(grouped).length 
+
+    return NextResponse.json({
+      success: true,
+      products: Object.keys(grouped).length,
+      debug: 'cron-sync-v2'
     });
-    
+
   } catch (error: any) {
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
+    // Surface upstream error details (e.g., Cafe24) for debugging
+    const upstreamStatus = error?.response?.status ?? null;
+    const upstreamData = error?.response?.data ?? null;
+    console.error('[cron/sync-products] upstream error', {
+      status: upstreamStatus,
+      data: upstreamData
+    });
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      upstreamStatus,
+      upstreamData,
+      debug: 'cron-sync-v2'
     }, { status: 500 });
   }
 }
