@@ -5,6 +5,7 @@ import { Loader2, ChevronRight, Plus, Minus } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
 import toast from 'react-hot-toast';
 import { GroupedProduct, ChildItem } from '@/lib/product-utils';
+import { formatSupplyPrice } from '@/lib/price-utils';
 
 interface ProductListPhase1Props {
     groups: GroupedProduct[];
@@ -35,10 +36,7 @@ const ChildOption = memo(({
         }
     }, [isFocused]);
 
-    const formattedPrice = new Intl.NumberFormat('ko-KR', {
-        style: 'currency',
-        currency: 'KRW',
-    }).format(child.price);
+    const formattedPrice = formatSupplyPrice(child.price); // 부가세 전 공급가 표시
 
     return (
         <div
@@ -131,8 +129,8 @@ const ProductCard = memo(({
                 ref={headerRef}
                 onClick={isSingleProduct ? undefined : onToggle}
                 className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSingleProduct
-                        ? 'cursor-default'
-                        : 'cursor-pointer hover:bg-gray-50/50'
+                    ? 'cursor-default'
+                    : 'cursor-pointer hover:bg-gray-50/50'
                     } ${focusedChildIndex === null ? 'bg-red-50/30' : ''}`}
             >
                 <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100">

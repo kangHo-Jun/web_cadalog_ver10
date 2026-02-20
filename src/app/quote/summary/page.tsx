@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useCartStore } from '@/store/useCartStore';
+import { toSupplyPrice } from '@/lib/price-utils';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, FileText, Trash2, Send } from 'lucide-react';
 
@@ -147,9 +148,9 @@ export default function QuoteSummaryPage() {
                                     <span className="text-sm text-gray-800 font-medium truncate">
                                         {item.product.product_name.replace(/<[^>]*>/g, '')}
                                     </span>
-                                    {/* Price */}
+                                    {/* Price - 부가세 전 공급가 표시 */}
                                     <span className="text-sm font-bold text-gray-700 text-right">
-                                        ₩{Number(item.product.price).toLocaleString()}원
+                                        ₩{toSupplyPrice(Number(item.product.price)).toLocaleString()}원
                                     </span>
                                     {/* Qty stepper */}
                                     <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">

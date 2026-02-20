@@ -3,6 +3,7 @@
 import React from 'react';
 import { X, Trash2, ShoppingCart, FileText } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
+import { toSupplyPrice } from '@/lib/price-utils';
 import { useRouter } from 'next/navigation';
 
 interface CartDrawerProps {
@@ -71,6 +72,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                             {items.map((item) => {
                                 const name = item.product.product_name.replace(/<[^>]*>/g, '');
                                 const price = Number(item.product.price);
+                                const supplyPrice = toSupplyPrice(price); // 부가세 전 공급가
                                 return (
                                     <div key={item.product.product_no} className="px-5 py-4">
                                         {/* Name row */}
@@ -88,7 +90,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                                         {/* Price & qty row */}
                                         <div className="flex items-center justify-between">
                                             <span className="text-sm font-bold text-gray-700">
-                                                ₩{(price * item.quantity).toLocaleString()}원
+                                                ₩{(supplyPrice * item.quantity).toLocaleString()}원
                                             </span>
                                             {/* Qty stepper */}
                                             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
