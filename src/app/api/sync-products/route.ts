@@ -19,6 +19,7 @@ export async function GET() {
         params: {
           category: catNo,
           embed: 'options,variants', // [수정] options 추가 (option_value 접근에 필수)
+          display: 'T', // [수정] 진열중인 상품만 조회 (T=진열함, F=진열 안 함)
           limit: 100
         }
       });

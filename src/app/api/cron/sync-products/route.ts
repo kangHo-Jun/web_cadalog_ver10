@@ -16,6 +16,7 @@ export async function GET() {
         params: {
           category: catNo,
           embed: 'options,variants',
+          display: 'T', // [수정] 진열중인 상품만 조회 (T=진열함, F=진열 안 함)
           limit: 100
         }
       });
