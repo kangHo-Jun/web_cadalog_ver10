@@ -76,7 +76,7 @@ export default function Phase1CatalogView() {
     };
 
     return (
-        <div className="h-screen overflow-hidden flex flex-col" style={{ background: '#f3f3f3' }}>
+        <div className="h-screen overflow-hidden flex flex-col">
             {/* Sticky header */}
             <StickySearchHeader
                 search={search}
@@ -88,14 +88,14 @@ export default function Phase1CatalogView() {
             <CartDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
             {/* Body: fixed sidebar + scrollable content */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden flex-row">
                 <FixedSidebar
                     selectedCategoryNo={selectedCategory}
                     onCategoryChange={handleCategoryChange}
                 />
 
                 {/* Main content — offset left by sidebar width */}
-                <main className="ml-40 flex-1 overflow-hidden flex flex-col p-4">
+                <main className="flex-1 overflow-hidden flex flex-col p-4">
                     {/* Product count */}
                     <p className="text-xs text-gray-500 mb-3 flex-shrink-0">
                         {isLoading ? '불러오는 중...' : `총 ${groups.length}개 상품 그룹`}
@@ -114,7 +114,7 @@ export default function Phase1CatalogView() {
             {/* Cart bar (bottom) — 견적요청 연결 */}
             {totalItems > 0 && (
                 <div
-                    className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 border-t border-white/10 shadow-2xl"
+                    className="absolute bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 border-t border-white/10 shadow-2xl"
                     style={{ background: '#123628' }}
                 >
                     <span className="text-white text-sm">

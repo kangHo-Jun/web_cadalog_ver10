@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { Loader2, ChevronRight, Plus, Minus } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
 import toast from 'react-hot-toast';
@@ -28,19 +28,11 @@ const ChildOption = memo(({
     isFocused: boolean;
 }) => {
     const [quantity, setQuantity] = useState(1);
-    const ref = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (isFocused) {
-            ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    }, [isFocused]);
 
     const formattedPrice = formatSupplyPrice(child.price); // 부가세 전 공급가 표시
 
     return (
         <div
-            ref={ref}
             className={`grid grid-cols-[1fr_110px_148px_100px] items-center gap-3 px-4 py-3 border-t border-gray-100 transition-colors ${isFocused ? 'bg-green-50 ring-2 ring-[#48BB78] ring-inset' : 'hover:bg-gray-50/60'
                 }`}
         >
@@ -110,14 +102,7 @@ const ProductCard = memo(({
     onToggle: () => void;
     focusedChildIndex: number | null;
 }) => {
-    const headerRef = useRef<HTMLDivElement>(null);
     const isSingleProduct = group.children.length === 1 && group.children[0].isSingle;
-
-    useEffect(() => {
-        if (focusedChildIndex === null && headerRef.current) {
-            headerRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    }, [focusedChildIndex]);
 
     return (
         <div
@@ -126,7 +111,6 @@ const ProductCard = memo(({
         >
             {/* Parent Header */}
             <div
-                ref={headerRef}
                 onClick={isSingleProduct ? undefined : onToggle}
                 className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSingleProduct
                     ? 'cursor-default'
@@ -199,10 +183,15 @@ export default function ProductListPhase1({
     const [focusedIndex, setFocusedIndex] = useState(0);
 
     const handleAdd = useCallback((child: ChildItem, quantity: number) => {
-        // CartStore에 맞게 변환
+        // variantCode(전체 문자열) 혹은 name을 기반으로 고유한 숫자 ID 생성
+        const idSource = child.variantCode || child.name;
+        const productNo = Math.abs(
+            idSource.split('').reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) | 0, 0)
+        );
+
         addToCart(
             {
-                product_no: child.variantCode ? parseInt(child.variantCode.replace(/\D/g, ''), 10) : 0,
+                product_no: productNo,
                 product_name: child.name,
                 price: String(child.price),
                 product_code: child.variantCode || '',

@@ -28,7 +28,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
       >
-        {children}
+        <div className="min-h-screen bg-[#f3f3f3]">
+          <div className="max-w-[900px] mx-auto bg-white shadow-sm relative">
+            {children}
+          </div>
+        </div>
         <Toaster position="bottom-center" />
       </body>
     </html>
