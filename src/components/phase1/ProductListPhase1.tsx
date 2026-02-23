@@ -182,7 +182,7 @@ export default function ProductListPhase1({
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
 
-    const handleAdd = useCallback((child: ChildItem, quantity: number) => {
+    const handleAdd = useCallback((parentName: string, child: ChildItem, quantity: number) => {
         // variantCode(전체 문자열) 혹은 name을 기반으로 고유한 숫자 ID 생성
         const idSource = child.variantCode || child.name;
         const productNo = Math.abs(
@@ -192,6 +192,7 @@ export default function ProductListPhase1({
         addToCart(
             {
                 product_no: productNo,
+                parent_name: parentName,
                 product_name: child.name,
                 price: String(child.price),
                 product_code: child.variantCode || '',
@@ -203,7 +204,7 @@ export default function ProductListPhase1({
         toast.success((t) => (
             <div className="flex items-center gap-3">
                 <span className="text-[13px] font-medium text-gray-900">
-                    {child.name} {quantity}개 담기 완료
+                    {parentName} {child.name} {quantity}개 담기 완료
                 </span>
                 <button
                     onClick={() => {
@@ -245,7 +246,7 @@ export default function ProductListPhase1({
                     <ProductCard
                         key={group.id}
                         group={group}
-                        onAdd={handleAdd}
+                        onAdd={(child, q) => handleAdd(group.parentName, child, q)}
                         isExpanded={isExpanded}
                         onToggle={() => toggleGroup(group.id)}
                         focusedChildIndex={null}

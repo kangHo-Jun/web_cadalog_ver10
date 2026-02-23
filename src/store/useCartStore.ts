@@ -4,6 +4,7 @@ import { create } from 'zustand';
 
 export interface CartProduct {
     product_no: number;
+    parent_name: string;
     product_name: string;
     price: string;
     product_code: string;

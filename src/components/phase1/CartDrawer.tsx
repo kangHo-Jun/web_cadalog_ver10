@@ -77,9 +77,14 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                                     <div key={item.product.product_no} className="px-5 py-4">
                                         {/* Name row */}
                                         <div className="flex items-start justify-between gap-2 mb-2">
-                                            <p className="text-sm font-medium text-gray-800 leading-snug flex-1">
-                                                {name}
-                                            </p>
+                                            <div className="flex-1 overflow-hidden">
+                                                <p className="text-[11px] text-gray-400 font-medium leading-tight mb-0.5">
+                                                    {item.product.parent_name?.replace(/<[^>]*>/g, '')}
+                                                </p>
+                                                <p className="text-sm font-bold text-gray-800 leading-snug">
+                                                    {item.product.product_name.replace(/<[^>]*>/g, '')}
+                                                </p>
+                                            </div>
                                             <button
                                                 onClick={() => removeFromCart(item.product.product_no)}
                                                 className="text-gray-300 hover:text-red-400 transition-colors shrink-0 mt-0.5"
