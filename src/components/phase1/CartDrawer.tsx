@@ -77,11 +77,11 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                                     <div key={item.product.product_no} className="px-5 py-4">
                                         {/* Name row */}
                                         <div className="flex items-start justify-between gap-2 mb-2">
-                                            <div className="flex-1 overflow-hidden">
-                                                <p className="text-[11px] text-gray-400 font-medium leading-tight mb-0.5">
+                                            <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
+                                                <p className="text-xs text-gray-400 leading-tight">
                                                     {item.product.parent_name?.replace(/<[^>]*>/g, '')}
                                                 </p>
-                                                <p className="text-sm font-bold text-gray-800 leading-snug">
+                                                <p className="text-sm font-bold text-gray-900 leading-tight">
                                                     {item.product.product_name.replace(/<[^>]*>/g, '')}
                                                 </p>
                                             </div>
