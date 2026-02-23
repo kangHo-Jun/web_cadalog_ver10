@@ -10,6 +10,8 @@ import CartDrawer from './CartDrawer';
 import { useCartStore } from '@/store/useCartStore';
 import { log, trackMetric } from '@/lib/logger';
 import { GroupedProduct } from '@/lib/product-utils';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Trash2 } from 'lucide-react';
 
 const fetcher = (url: string) =>
     fetch(url).then((res) => {
@@ -95,7 +97,7 @@ export default function Phase1CatalogView() {
                 />
 
                 {/* Main content — offset left by sidebar width */}
-                <main className="flex-1 overflow-hidden flex flex-col p-4">
+                <main className="flex-1 overflow-hidden flex flex-col relative p-4">
                     {/* Product count */}
                     <p className="text-xs text-gray-500 mb-3 flex-shrink-0">
                         {isLoading ? '불러오는 중...' : `총 ${groups.length}개 상품 그룹`}
@@ -108,41 +110,54 @@ export default function Phase1CatalogView() {
                             error={error}
                         />
                     </div>
+
+                    {/* Cart bar (bottom) — 견적요청 연결 */}
+                    <AnimatePresence>
+                        {totalItems > 0 && (
+                            <motion.div
+                                initial={{ y: 100, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                exit={{ y: 100, opacity: 0 }}
+                                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                className={`absolute bottom-0 left-0 right-0 flex items-center justify-between px-6 py-4 border-t border-white/10 shadow-2xl transition-all duration-300 ${drawerOpen ? 'z-30 opacity-30 pointer-events-none' : 'z-50 opacity-100'
+                                    }`}
+                                style={{ background: '#123628' }}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <button
+                                        onClick={() => {
+                                            if (window.confirm('장바구니를 비우겠습니까?')) {
+                                                clearCart();
+                                            }
+                                        }}
+                                        className="p-1.5 text-white/50 hover:text-red-400 transition-colors"
+                                        title="장바구니 비우기"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                    <span className="text-white text-sm font-medium">
+                                        🛒 {totalItems}개 선택 |{' '}
+                                        <span className="font-bold">
+                                            {new Intl.NumberFormat('ko-KR', {
+                                                style: 'currency',
+                                                currency: 'KRW',
+                                            }).format(totalAmount)}
+                                        </span>
+                                    </span>
+                                </div>
+
+                                <button
+                                    onClick={() => router.push('/quote/summary')}
+                                    className="px-8 py-2.5 rounded-xl text-white text-sm font-bold transition-all hover:brightness-110 active:scale-95 shadow-lg"
+                                    style={{ background: '#48BB78' }}
+                                >
+                                    견적요청
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </main>
             </div>
-
-            {/* Cart bar (bottom) — 견적요청 연결 */}
-            {totalItems > 0 && (
-                <div
-                    className="absolute bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 border-t border-white/10 shadow-2xl"
-                    style={{ background: '#123628' }}
-                >
-                    <span className="text-white text-sm">
-                        🛒 {totalItems}개 선택 |{' '}
-                        <span className="font-bold">
-                            {new Intl.NumberFormat('ko-KR', {
-                                style: 'currency',
-                                currency: 'KRW',
-                            }).format(totalAmount)}
-                        </span>
-                    </span>
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => clearCart()}
-                            className="text-xs text-white/50 hover:text-white"
-                        >
-                            초기화
-                        </button>
-                        <button
-                            onClick={() => router.push('/quote/summary')}
-                            className="px-4 py-2 rounded-lg text-white text-sm font-semibold transition-all active:scale-[0.97]"
-                            style={{ background: '#48BB78' }}
-                        >
-                            견적요청
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
