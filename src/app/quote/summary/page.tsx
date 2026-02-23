@@ -138,16 +138,21 @@ export default function QuoteSummaryPage() {
                             </button>
                         </div>
                     ) : (
-                        <div className="divide-y divide-gray-50">
+                        <div className="divide-y divide-gray-50 max-h-[460px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200">
                             {items.map((item) => (
                                 <div
                                     key={item.product.product_no}
-                                    className="grid grid-cols-[1fr_120px_80px_32px] items-center gap-3 px-6 py-4"
+                                    className="grid grid-cols-[1fr_120px_80px_32px] items-center gap-3 px-6 py-4 hover:bg-gray-50/50 transition-colors"
                                 >
-                                    {/* Name */}
-                                    <span className="text-sm text-gray-800 font-medium truncate">
-                                        {item.product.product_name.replace(/<[^>]*>/g, '')}
-                                    </span>
+                                    {/* Name - 2줄 구조로 변경 (CartDrawer와 통일) */}
+                                    <div className="flex flex-col gap-0.5 overflow-hidden">
+                                        <span className="text-[10px] text-gray-400 font-medium truncate">
+                                            {item.product.parent_name?.replace(/<[^>]*>/g, '')}
+                                        </span>
+                                        <span className="text-sm text-gray-800 font-bold truncate">
+                                            {item.product.product_name.replace(/<[^>]*>/g, '')}
+                                        </span>
+                                    </div>
                                     {/* Price - 부가세 전 공급가 표시 */}
                                     <span className="text-sm font-bold text-gray-700 text-right">
                                         ₩{toSupplyPrice(Number(item.product.price)).toLocaleString()}원
