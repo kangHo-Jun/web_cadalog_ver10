@@ -5,6 +5,7 @@ async function testCart() {
     const store = useCartStore.getState();
     const testProduct = {
         product_no: 123,
+        parent_name: 'Test Parent Product',
         product_name: 'Test Product',
         price: '1000',
         product_code: 'TP001'
