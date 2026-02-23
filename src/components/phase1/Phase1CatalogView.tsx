@@ -119,7 +119,7 @@ export default function Phase1CatalogView() {
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: 100, opacity: 0 }}
                                 transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                                className={`absolute bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 border-t border-white/10 shadow-2xl transition-all duration-300 ${drawerOpen ? 'opacity-30 pointer-events-none' : 'opacity-100'
+                                className={`absolute bottom-0 left-0 right-0 flex items-center justify-between px-6 py-4 border-t border-white/10 shadow-2xl transition-all duration-300 ${drawerOpen ? 'z-30 opacity-30 pointer-events-none' : 'z-50 opacity-100'
                                     }`}
                                 style={{ background: '#123628' }}
                             >
