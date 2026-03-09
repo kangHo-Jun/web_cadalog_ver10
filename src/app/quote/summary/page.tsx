@@ -8,7 +8,6 @@ import { ArrowLeft, FileText, Trash2, Send } from 'lucide-react';
 
 interface QuoteFormData {
     name: string;
-    email: string;
     phone: string;
     message: string;
 }
@@ -23,7 +22,6 @@ export default function QuoteSummaryPage() {
 
     const [formData, setFormData] = useState<QuoteFormData>({
         name: '',
-        email: '',
         phone: '',
         message: '',
     });
@@ -32,8 +30,8 @@ export default function QuoteSummaryPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.name || !formData.email || !formData.phone) {
-            alert('이름, 이메일, 연락처는 필수 입력 항목입니다.');
+        if (!formData.name || !formData.phone) {
+            alert('이름과 연락처는 필수 입력 항목입니다.');
             return;
         }
         if (items.length === 0) {
@@ -74,8 +72,8 @@ export default function QuoteSummaryPage() {
                     <div className="text-5xl mb-4">✅</div>
                     <h2 className="text-2xl font-bold text-gray-800 mb-2">견적 요청 완료</h2>
                     <p className="text-gray-500 text-sm mb-6">
-                        담당자가 <span className="font-semibold text-gray-800">{formData.email}</span>로
-                        견적서를 보내드립니다.
+                        견적 요청이 정상적으로 접수되었습니다. <br />
+                        담당자가 확인 후 연락처로 안내해 드립니다.
                     </p>
                     <button
                         onClick={() => router.push('/quote')}
@@ -231,18 +229,7 @@ export default function QuoteSummaryPage() {
                                 />
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                                이메일 <span className="text-red-400">*</span>
-                            </label>
-                            <input
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
-                                placeholder="example@company.com"
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#48BB78]/30 focus:border-[#48BB78] transition-all"
-                            />
-                        </div>
+
                         <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1">
                                 추가 요청사항
