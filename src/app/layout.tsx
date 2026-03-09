@@ -29,7 +29,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
       >
         <div className="min-h-screen bg-[#f3f3f3]">
-          <div className="max-w-[900px] mx-auto bg-white shadow-sm relative">
+          <div className="max-w-[900px] mx-auto bg-white shadow-sm relative min-h-screen">
             {children}
           </div>
         </div>

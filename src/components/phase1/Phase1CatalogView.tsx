@@ -78,7 +78,7 @@ export default function Phase1CatalogView() {
     };
 
     return (
-        <div className="h-screen overflow-hidden flex flex-col">
+        <div className="flex flex-col">
             {/* Sticky header */}
             <StickySearchHeader
                 search={search}
