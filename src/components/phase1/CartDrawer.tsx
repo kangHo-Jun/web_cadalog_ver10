@@ -94,9 +94,12 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                                         </div>
                                         {/* Price & qty row */}
                                         <div className="flex items-center justify-between">
-                                            <span className="text-sm font-bold text-gray-700">
-                                                ₩{(supplyPrice * item.quantity).toLocaleString()}원
-                                            </span>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold text-gray-700">
+                                                    ₩{(supplyPrice * item.quantity).toLocaleString()}원
+                                                </span>
+                                                <span className="text-[9px] text-gray-400 font-medium">(VAT 별도)</span>
+                                            </div>
                                             {/* Qty stepper */}
                                             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
                                                 <button
@@ -128,7 +131,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                     <div className="shrink-0 border-t border-gray-100 px-5 py-4 space-y-3 bg-white">
                         {/* Total */}
                         <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-500">합계</span>
+                            <span className="text-sm text-gray-500 font-medium">총 합계 <span className="text-[10px] opacity-70">(VAT 포함)</span></span>
                             <span className="text-base font-extrabold text-gray-800">
                                 ₩{totalAmount.toLocaleString()}원
                             </span>

@@ -190,7 +190,7 @@ export default function QuoteSummaryPage() {
                     {/* Total */}
                     {items.length > 0 && (
                         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
-                            <span className="text-sm text-gray-500">합계</span>
+                            <span className="text-sm text-gray-500 font-medium">총 합계 <span className="text-[10px] opacity-70">(VAT 포함)</span></span>
                             <span className="text-lg font-extrabold text-gray-800">
                                 ₩{totalAmount.toLocaleString()}원
                             </span>

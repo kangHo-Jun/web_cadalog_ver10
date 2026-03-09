@@ -42,9 +42,12 @@ const ChildOption = memo(({
             </span>
 
             {/* 가격 */}
-            <span className="text-[13px] font-bold text-gray-700 text-right">
-                {formattedPrice}
-            </span>
+            <div className="flex flex-col items-end">
+                <span className="text-[13px] font-bold text-gray-700">
+                    {formattedPrice}
+                </span>
+                <span className="text-[9px] text-gray-400 font-medium leading-none mt-0.5">(VAT 별도)</span>
+            </div>
 
             {/* 수량 UI */}
             <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">

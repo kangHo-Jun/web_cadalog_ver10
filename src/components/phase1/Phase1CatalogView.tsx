@@ -143,6 +143,7 @@ export default function Phase1CatalogView() {
                                                 currency: 'KRW',
                                             }).format(totalAmount)}
                                         </span>
+                                        <span className="text-[10px] opacity-60 ml-1">(VAT 포함)</span>
                                     </span>
                                 </div>
 
