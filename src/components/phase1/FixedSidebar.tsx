@@ -15,7 +15,7 @@ export default function FixedSidebar({
 }: FixedSidebarProps) {
     return (
         <aside
-            className="flex-shrink-0 w-40 h-full overflow-y-auto z-40 border-r border-gray-200"
+            className="flex-shrink-0 w-40 sticky top-[52px] h-[calc(100vh-52px)] overflow-y-auto z-40 border-r border-gray-200"
             style={{ background: '#f3f3f3' }}
         >
             <nav className="p-2 space-y-0.5">
