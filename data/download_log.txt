@@ -1,0 +1,143 @@
+/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Traceback (most recent call last):
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connection.py", line 204, in _new_conn
+    sock = connection.create_connection(
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/util/connection.py", line 85, in create_connection
+    raise err
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/util/connection.py", line 73, in create_connection
+    sock.connect(sa)
+OSError: [Errno 51] Network is unreachable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+    raise new_e
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
+    conn.connect()
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connection.py", line 759, in connect
+    self.sock = sock = self._new_conn()
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connection.py", line 219, in _new_conn
+    raise NewConnectionError(
+urllib3.exceptions.NewConnectionError: HTTPSConnection(host='oapiab.ecount.com', port=443): Failed to establish a new connection: [Errno 51] Network is unreachable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/requests/adapters.py", line 644, in send
+    resp = conn.urlopen(
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/urllib3/util/retry.py", line 535, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='oapiab.ecount.com', port=443): Max retries exceeded with url: /OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID=3635303231377c5a4152544b414e47:AB-ETFXecqyM5MnZ (Caused by NewConnectionError("HTTPSConnection(host='oapiab.ecount.com', port=443): Failed to establish a new connection: [Errno 51] Network is unreachable"))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<string>", line 19, in <module>
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/requests/api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/requests/api.py", line 59, in request
+    return session.request(method=method, url=url, **kwargs)
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/Users/zart/Library/Python/3.9/lib/python/site-packages/requests/adapters.py", line 677, in send
+    raise ConnectionError(e, request=request)
+requests.exceptions.ConnectionError: HTTPSConnectionPool(host='oapiab.ecount.com', port=443): Max retries exceeded with url: /OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID=3635303231377c5a4152544b414e47:AB-ETFXecqyM5MnZ (Caused by NewConnectionError("HTTPSConnection(host='oapiab.ecount.com', port=443): Failed to establish a new connection: [Errno 51] Network is unreachable"))
+페이지 1: 412 — 30초 대기
+페이지 1: 누계 10000건
+페이지 2: 누계 20000건
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 412 — 30초 대기
+페이지 3: 누계 30000건
+페이지 4: 412 — 30초 대기
+페이지 4: 누계 40000건
+페이지 5: 412 — 30초 대기
+페이지 5: 412 — 30초 대기
+페이지 5: 412 — 30초 대기
+페이지 5: 누계 50000건
+페이지 6: 412 — 30초 대기
+페이지 6: 누계 60000건
+페이지 7: 412 — 30초 대기
+페이지 7: 412 — 30초 대기
+페이지 7: 412 — 30초 대기
+페이지 7: 412 — 30초 대기
+페이지 7: 412 — 30초 대기
+페이지 7: 누계 70000건
+페이지 8: 누계 80000건
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 412 — 30초 대기
+페이지 9: 누계 90000건
+페이지 10: 412 — 30초 대기
+페이지 10: 412 — 30초 대기
+페이지 10: 412 — 30초 대기
+페이지 10: 412 — 30초 대기
+페이지 10: 누계 100000건
+페이지 11: 누계 110000건
+페이지 12: 412 — 30초 대기
+페이지 12: 누계 120000건
+페이지 13: 412 — 30초 대기
+페이지 13: 412 — 30초 대기
+페이지 13: 412 — 30초 대기
+페이지 13: 412 — 30초 대기
+페이지 13: 누계 130000건
+페이지 14: 누계 140000건
+페이지 15: 412 — 30초 대기
+페이지 15: 누계 150000건
+페이지 16: 누계 160000건
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 412 — 30초 대기
+페이지 17: 누계 170000건
+페이지 18: 412 — 30초 대기
+페이지 18: 412 — 30초 대기
+페이지 18: 누계 180000건
+페이지 19: 412 — 30초 대기
+페이지 19: 412 — 30초 대기
+페이지 19: 412 — 30초 대기
+페이지 19: 누계 190000건
+페이지 20: 412 — 30초 대기
+페이지 20: 누계 200000건
+페이지 21: 누계 210000건
+페이지 22: 누계 220000건
+페이지 23: 누계 230000건
+페이지 24: 412 — 30초 대기
+페이지 24: 412 — 30초 대기
