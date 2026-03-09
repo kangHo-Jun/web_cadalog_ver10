@@ -1,0 +1,14 @@
+product_code,display_order,custom_name,custom_price,category
+# 아래에 웹에 표시할 30개 상품을 추가하세요
+# product_code: 카페24 상품코드 (필수)
+# display_order: 표시 순서 (1, 2, 3...)
+# custom_name: 커스텀 상품명 (비워두면 카페24 상품명 사용)
+# custom_price: 커스텀 가격 (비워두면 카페24 가격 사용, 0이면 "가격문의")
+# category: 카테고리명 (단열재, 목재, 마감재 등)
+#
+# 예시:
+P0000CHI,1,,81400,특수자재
+P0000CHE,2,,1191850,거래처
+P0000CHJ,3,프리미엄 단열재 PF보드 LX지인,35000,단열재
+P0000CHH,4,단열재 GCS보드,28000,단열재
+P0000CHD,5,차음시트 2T 3T 4T,15000,차음재
