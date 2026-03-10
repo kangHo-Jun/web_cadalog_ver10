@@ -6,14 +6,14 @@ load_dotenv('config/secrets.env')
 
 COM_CODE = os.getenv('ECOUNT_COM_CODE')
 USER_ID = os.getenv('ECOUNT_USER_ID')
-CERT_KEY = os.getenv('ECOUNT_CERT_KEY')
+CERT_KEY = os.getenv('ECOUNT_TEST_CERT_KEY')
 
 if not COM_CODE or not USER_ID or not CERT_KEY:
     raise SystemExit("ECOUNT_COM_CODE / ECOUNT_USER_ID / ECOUNT_CERT_KEY 환경변수가 필요합니다.")
 
 # Zone 조회
 r1 = requests.post(
-    'https://oapi.ecount.com/OAPI/V2/Zone',
+    'https://sboapi.ecount.com/OAPI/V2/Zone',
     json={'COM_CODE': COM_CODE},
     timeout=10
 )
@@ -23,7 +23,7 @@ print('ZONE:', zone)
 
 # 로그인
 r2 = requests.post(
-    f'https://oapi{zone}.ecount.com/OAPI/V2/OAPILogin',
+    f'https://sboapi{zone}.ecount.com/OAPI/V2/OAPILogin',
     json={
         'COM_CODE': COM_CODE,
         'USER_ID': USER_ID,
@@ -34,8 +34,11 @@ r2 = requests.post(
     timeout=10
 )
 print('Login Status:', r2.status_code)
+print('Login Response:', r2.json())
 
 session_id = r2.json().get('Data', {}).get('Datas', {}).get('SESSION_ID', '')
+if not session_id:
+    session_id = r2.json().get('Data', {}).get('SESSION_ID', '')
 print('SESSION_ID:', session_id)
 
 if not session_id:
