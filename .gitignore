@@ -8,6 +8,7 @@
 
 # testing
 /coverage
+.pytest_cache/
 
 # next.js
 /.next/
@@ -17,7 +18,6 @@
 /build
 
 # misc
-.DS_Store
 *.pem
 
 # debug
@@ -46,6 +46,26 @@ next-env.d.ts
 *.swo
 *~
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+
+# GAS
+.clasp.json
+
+# Local Data (Optional, but usually we exclude large JSON dumps)
+# data/ecount_products.json
+# data/cafe24_products.json
