@@ -164,9 +164,10 @@ function syncPrices() {
             }
 
             const { productNo, variantCode, cachedPrice } = entry;
+            const priceWithVat = Math.round(ecPrice * 1.1);
 
             // 가격 변동 없으면 스킵
-            if (Math.round(ecPrice) === Math.round(cachedPrice)) {
+            if (Math.round(cachedPrice) === priceWithVat) {
                 newMappingRows.push([customCode, productNo, variantCode, cachedPrice, now(), autoRegistered ? '자동등록+스킵(변동없음)' : '스킵(변동없음)']);
                 skipped++;
                 continue;
@@ -176,19 +177,19 @@ function syncPrices() {
             logs.push(`[${now()}] 변동: ${customCode} | ${cachedPrice} → ${ecPrice}`);
 
             if (G_CFG[KEY.DRY_RUN] === 'true') {
-                newMappingRows.push([customCode, productNo, variantCode, ecPrice, now(), autoRegistered ? '자동등록+DRY_RUN' : 'DRY_RUN']);
+                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), autoRegistered ? '자동등록+DRY_RUN' : 'DRY_RUN']);
                 updated++;
                 continue;
             }
 
             // 단품(variant 없음) → product price 직접 업데이트
             if (!variantCode) {
-                const pRes = updateProductPriceDirect(mallId, apiVer, productNo, ecPrice);
+                const pRes = updateProductPriceDirect(mallId, apiVer, productNo, priceWithVat);
                 if (pRes.ok) {
                     Logger.log(`단품 업데이트 성공: ${customCode} (${pRes.status})`);
                     logs.push(`  └ 성공(단품) (${pRes.status}): ${customCode}`);
-                    newMappingRows.push([customCode, productNo, '', ecPrice, now(), '성공(단품)']);
-                    entry.cachedPrice = ecPrice;
+                    newMappingRows.push([customCode, productNo, '', priceWithVat, now(), '성공(단품)']);
+                    entry.cachedPrice = priceWithVat;
                     updated++;
                 } else {
                     Logger.log(`단품 업데이트 실패: ${customCode} | status=${pRes.status}`);
@@ -202,14 +203,14 @@ function syncPrices() {
 
             // 카페24 직접 PUT (product_no + variant_code 사용)
             const url = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants/${variantCode}`;
-            const payload = { request: { variant: { additional_amount: Math.round(ecPrice) } } };
+            const payload = { request: { variant: { additional_amount: priceWithVat } } };
             const res = c24Put(url, apiVer, payload);
 
             if (res.ok) {
                 Logger.log(`업데이트 성공: ${customCode} (${res.status})`);
                 logs.push(`  └ 성공 (${res.status}): ${customCode}`);
-                newMappingRows.push([customCode, productNo, variantCode, ecPrice, now(), autoRegistered ? '자동등록+성공' : '성공']);
-                entry.cachedPrice = ecPrice;
+                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), autoRegistered ? '자동등록+성공' : '성공']);
+                entry.cachedPrice = priceWithVat;
                 updated++;
             } else {
                 Logger.log(`업데이트 실패: ${customCode} | status=${res.status} | ${res.body.substring(0, 80)}`);
