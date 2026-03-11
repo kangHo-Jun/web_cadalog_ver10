@@ -34,6 +34,12 @@ const ProductList: React.FC<ProductListProps> = ({
 }) => {
     const [overlayGroupKey, setOverlayGroupKey] = useState<string | null>(null);
 
+    const formatPrice = (rawPrice: string) => {
+        const numeric = Number(String(rawPrice || '').replace(/,/g, ''));
+        if (!Number.isFinite(numeric) || numeric <= 0) return '가격문의';
+        return `${numeric.toLocaleString('ko-KR')}원`;
+    };
+
     const getGroupKey = (product: Product): string => {
         if (product.product_code && product.product_code.length > 1) {
             return product.product_code.slice(0, -1);
@@ -123,7 +129,7 @@ const ProductList: React.FC<ProductListProps> = ({
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500 font-mono">{product.product_code}</td>
                                         <td className="px-6 py-4 font-bold text-gray-900 whitespace-nowrap">
-                                            {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(Number(product.price))}
+                                            {formatPrice(product.price)}
                                         </td>
                                         {showActions && (
                                             <td className="px-6 py-4">
@@ -210,7 +216,7 @@ const ProductList: React.FC<ProductListProps> = ({
                                                 </div>
                                                 <div className="text-xs text-gray-500">{product.product_code}</div>
                                                 <div className="text-sm font-bold text-gray-900">
-                                                    {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(Number(product.price))}
+                                                    {formatPrice(product.price)}
                                                 </div>
                                             </div>
                                         </div>

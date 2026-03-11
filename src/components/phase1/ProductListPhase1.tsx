@@ -29,7 +29,9 @@ const ChildOption = memo(({
 }) => {
     const [quantity, setQuantity] = useState(1);
 
-    const formattedPrice = formatSupplyPrice(child.price); // 부가세 전 공급가 표시
+    const formattedPrice = child.price && child.price > 0
+        ? formatSupplyPrice(child.price)
+        : '가격문의';
 
     return (
         <div
@@ -43,7 +45,11 @@ const ChildOption = memo(({
 
             {/* 가격 */}
             <div className="flex flex-col items-end">
-                <span className="text-[13px] font-bold text-gray-700">
+                <span
+                    className={child.price && child.price > 0
+                        ? 'text-[13px] font-bold text-blue-600'
+                        : 'text-[13px] text-gray-400 text-sm'}
+                >
                     {formattedPrice}
                 </span>
                 <span className="text-[9px] text-gray-400 font-medium leading-none mt-0.5">(VAT 별도)</span>

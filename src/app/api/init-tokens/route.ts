@@ -12,8 +12,8 @@ export async function POST() {
     try {
         // 환경 변수에서 토큰 가져오기
         const tokens = {
-            access_token: process.env.CAFE24_ACCESS_TOKEN || '',
-            refresh_token: process.env.CAFE24_REFRESH_TOKEN || '',
+            access_token: process.env.CAFE24_ACCESS_TOKEN?.trim() || '',
+            refresh_token: process.env.CAFE24_REFRESH_TOKEN?.trim() || '',
             expires_at: Date.now() + 2 * 60 * 60 * 1000, // 2시간 후
         };
 

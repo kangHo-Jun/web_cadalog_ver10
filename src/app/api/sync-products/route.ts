@@ -3,6 +3,7 @@ import { createClient } from 'redis';
 import apiClient from '@/lib/api-client';
 import { normalizeProductName, GroupedProduct, ChildItem } from '@/lib/product-utils';
 import { QUOTE_CATEGORY_NOS } from '@/config/quote-categories';
+import { getPriceMap } from '@/lib/price-map';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -12,6 +13,7 @@ const SNAPSHOT_KEY = 'catalog:snapshot:v1';
 
 export async function GET() {
   try {
+    const priceMap = await getPriceMap();
     const allProducts: any[] = [];
 
     for (const catNo of CATEGORY_NOS) {
@@ -72,7 +74,9 @@ export async function GET() {
 
           const additionalAmount = Number(matchedVariant?.additional_amount || 0);
           const basePrice = Number(product.price || 0);
-          const price = basePrice + additionalAmount;
+          const customVariantCode = matchedVariant?.custom_variant_code || '';
+          const sheetPrice = priceMap?.[customVariantCode];
+          const price = sheetPrice !== undefined ? sheetPrice : basePrice + additionalAmount;
           const variantCode = matchedVariant?.variant_code || '';
 
           return { name, price, variantCode };
@@ -82,7 +86,7 @@ export async function GET() {
         // Case B: 단일 상품 → 부모 자체를 1개 자식으로 반환
         children = [{
           name: parentName,
-          price: Number(product.price || 0),
+          price: priceMap?.[product.custom_product_code] ?? Number(product.price || 0),
           isSingle: true
         }];
       }

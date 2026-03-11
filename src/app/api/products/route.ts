@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import apiClient from '@/lib/api-client';
 import axios from 'axios';
 import { QUOTE_CATEGORIES, QUOTE_CATEGORY_NOS } from '@/config/quote-categories';
+import { getPriceMap } from '@/lib/price-map';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,6 +14,35 @@ export async function GET(request: Request) {
   const type = searchParams.get('type'); // 'quote' for 견적서 products only
 
   try {
+    let priceMap: Record<string, number> | null = null;
+    try {
+      priceMap = await getPriceMap();
+    } catch (priceError: any) {
+      console.error('Failed to load price map:', priceError?.message || priceError);
+    }
+
+    const applySheetPrice = (product: any) => {
+      if (!priceMap) return product;
+
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+      const enrichedVariants = variants.map((variant: any) => {
+        const code = String(variant?.custom_variant_code || '').trim();
+        const sheetPrice = code ? priceMap[code] : undefined;
+        return {
+          ...variant,
+          sheet_price: sheetPrice !== undefined ? String(sheetPrice) : '',
+        };
+      });
+
+      const firstVariantPrice = enrichedVariants[0]?.sheet_price || '';
+
+      return {
+        ...product,
+        variants: enrichedVariants,
+        price: firstVariantPrice,
+      };
+    };
+
     // For quote or price type, fetch products from registered quote categories
     if (type === 'quote' || type === 'price') {
       const categoryNos = category ? [Number(category)] : QUOTE_CATEGORY_NOS;
@@ -25,6 +55,7 @@ export async function GET(request: Request) {
             category: catNo,
             selling: 'T',
             limit: 100,
+            embed: 'variants',
           },
           timeout: 10000, // 10 second timeout
         }).catch((err) => {
@@ -39,11 +70,14 @@ export async function GET(request: Request) {
       responses.forEach((response, index) => {
         const catNo = categoryNos[index];
         const quoteCat = QUOTE_CATEGORIES.find(c => c.category_no === catNo);
-        const categoryProducts = (response.data.products || []).map((product: any) => ({
-          ...product,
-          category_name: quoteCat?.category_name || product.category_name,
-          display_category_name: quoteCat?.display_name || product.category_name,
-        }));
+        const categoryProducts = (response.data.products || []).map((product: any) => {
+          const priced = applySheetPrice(product);
+          return {
+            ...priced,
+            category_name: quoteCat?.category_name || product.category_name,
+            display_category_name: quoteCat?.display_name || product.category_name,
+          };
+        });
         products = [...products, ...categoryProducts];
       });
 
@@ -72,10 +106,11 @@ export async function GET(request: Request) {
         category: category || undefined,
         selling: 'T',
         limit: 100,
+        embed: 'variants',
       },
     });
 
-    const products = response.data.products || [];
+    const products = (response.data.products || []).map((product: any) => applySheetPrice(product));
 
     return NextResponse.json(
       { ...response.data, products },
@@ -90,16 +125,23 @@ export async function GET(request: Request) {
   } catch (error: any) {
     if (axios.isAxiosError(error)) {
       console.error('Cafe24 API Client Error:', {
+        code: error.code,
+        message: error.message,
         status: error.response?.status,
         data: error.response?.data,
-        url: error.config?.url
+        baseURL: error.config?.baseURL,
+        url: error.config?.url,
+        params: error.config?.params,
       });
     } else {
-      console.error('Unexpected API Error:', error.message);
+      console.error('Unexpected API Error:', error?.message || error);
     }
     return NextResponse.json(
-      { error: 'Failed to fetch products', details: error.response?.data },
-      { status: error.response?.status || 500 }
+      {
+        error: 'Failed to fetch products',
+        details: axios.isAxiosError(error) ? error.response?.data : error?.message,
+      },
+      { status: axios.isAxiosError(error) ? error.response?.status || 500 : 500 }
     );
   }
 }

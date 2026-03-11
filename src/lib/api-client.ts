@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { getTokens, refreshAccessToken } from './cafe24-auth';
 
+const mallId = process.env.MALL_ID;
+if (!mallId) {
+    console.error('❌ MALL_ID is missing; Cafe24 API requests will fail');
+}
+
 const apiClient = axios.create({
-    baseURL: `https://${process.env.MALL_ID}.cafe24api.com/api/v2/admin`,
+    baseURL: `https://${mallId}.cafe24api.com/api/v2/admin`,
     headers: {
         'Content-Type': 'application/json',
         'X-Cafe24-Api-Version': '2025-12-01',
@@ -14,6 +19,8 @@ apiClient.interceptors.request.use(async (config) => {
     const { access_token } = await getTokens();
     if (access_token) {
         config.headers.Authorization = `Bearer ${access_token}`;
+    } else {
+        console.warn('⚠️ Cafe24 access_token is empty; request may be unauthorized');
     }
     return config;
 });
