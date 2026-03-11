@@ -39,6 +39,9 @@ const KEY = {
     C24_API_VERSION: 'CAFE24_API_VERSION',
     DRY_RUN: 'DRY_RUN',
     DEBUG_PRODUCT_NO: 'DEBUG_PRODUCT_NO',
+    ADMIN_EMAIL: 'ADMIN_EMAIL',
+    TOKEN_EXPIRES_AT: 'TOKEN_EXPIRES_AT',
+    REFRESH_EXPIRES_AT: 'REFRESH_EXPIRES_AT',
 };
 
 const SH = { CONFIG: '설정', MAPPING: '매핑테이블', LOG: '실행로그' };
@@ -53,6 +56,7 @@ const TIME_LIMIT_MS = 320000; // 5분 20초 (GAS 6분 제한 대비 여유)
 let G_TOKEN = '';
 let G_CFG = null;
 let G_SS = null;
+let G_CONSEC_FAIL = 0;
 
 
 // ════════════════════════════════════════════════════════
@@ -64,6 +68,8 @@ function syncPrices() {
     const logs = [];
     let updated = 0, skipped = 0, errors = 0;
     const newMappingRows = [];
+    const unmappedRows = [];
+    let tokenRefreshFailed = false;
 
     try {
         // ── Step 1. 설정 로드 ─────────────────────────────────
@@ -76,24 +82,22 @@ function syncPrices() {
         // ── Step 2. 이카운트 가격 조회 ────────────────────────
         Logger.log('Step2: 이카운트 로그인...');
         const sessionId = ecLogin(G_CFG);
-        const ecPrices = fetchEcountPrices(G_CFG, sessionId);
+        const { prices: ecPrices, descriptions: ecDescriptions } = fetchEcountPrices(G_CFG, sessionId);
         Logger.log(`Step2: 이카운트 ${Object.keys(ecPrices).length}건 조회 완료`);
         logs.push(`[${now()}] Step2: 이카운트 ${Object.keys(ecPrices).length}건`);
 
-        // ── Step 3. 카페24 토큰 갱신 ─────────────────────────
-        Logger.log('Step3: 카페24 토큰 갱신 시도...');
+        // ── Step 2.1 토큰 자동 갱신/사전 알림 ─────────────────
         try {
-            const r = refreshCafe24Token(G_CFG);
-            G_TOKEN = r.access_token;
-            G_CFG[KEY.C24_ACCESS_TOKEN] = G_TOKEN;
-            if (r.refresh_token) G_CFG[KEY.C24_REFRESH_TOKEN] = r.refresh_token;
-            setConfig(G_SS, KEY.C24_ACCESS_TOKEN, G_TOKEN);
-            if (r.refresh_token) setConfig(G_SS, KEY.C24_REFRESH_TOKEN, r.refresh_token);
-            Logger.log('Step3: 토큰 갱신 성공. 토큰 앞 15자: ' + G_TOKEN.substring(0, 15));
-            logs.push(`[${now()}] Step3: 토큰 갱신 성공`);
+            const refreshed = ensureTokenRefreshIfNeeded_(G_SS, G_CFG);
+            if (refreshed) {
+                G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
+                logs.push(`[${now()}] Step2.1: 토큰 자동 갱신 완료`);
+            }
         } catch (te) {
-            Logger.log('Step3: 토큰 갱신 실패 (기존 사용): ' + te.message);
-            logs.push(`[${now()}] Step3: 토큰 갱신 실패 (기존 사용)`);
+            Logger.log('Step2.1: 토큰 갱신 실패 (기존 사용): ' + te.message);
+            logs.push(`[${now()}] Step2.1: 토큰 갱신 실패 (기존 사용)`);
+            tokenRefreshFailed = true;
+            notifyAdmin_(G_CFG, `syncPrices 토큰 갱신 실패: ${te.message}\n재인증 필요: OAuth 재인증 후 새 토큰을 [설정] 시트에 반영하세요.`);
         }
 
         // ── Step 4. 매핑테이블 로드 ───────────────────────────
@@ -133,10 +137,16 @@ function syncPrices() {
         Logger.log('Step5: 가격 변동 감지 및 타겟 업데이트 시작...');
         logs.push(`[${now()}] Step5: 타겟 업데이트 시작`);
 
-        for (const [customCode, ecPrice] of Object.entries(ecPrices)) {
+        const entries = Object.entries(ecPrices);
+        const startIdx = getSyncProgress_();
+        Logger.log(`Step5: 진행 시작 인덱스=${startIdx}/${entries.length}`);
+
+        for (let i = startIdx; i < entries.length; i++) {
+            const [customCode, ecPrice] = entries[i];
             if (new Date() - start > TIME_LIMIT_MS) {
-                Logger.log(`시간 제한 접근 (${((new Date() - start) / 1000).toFixed(0)}s) → 루프 중단`);
-                logs.push(`[${now()}] 시간 제한으로 중단`);
+                Logger.log(`시간 제한 접근 (${((new Date() - start) / 1000).toFixed(0)}s) → 진행 상태 저장 후 중단`);
+                logs.push(`[${now()}] 시간 제한으로 중단 (idx 저장)`);
+                setSyncProgress_(i);
                 break;
             }
 
@@ -149,6 +159,8 @@ function syncPrices() {
                 if (!auto) {
                     Logger.log(`미매핑: ${customCode} (카페24 캐시에도 없음)`);
                     newMappingRows.push([customCode, '', '', ecPrice, now(), '미매핑']);
+                    const desc = (ecDescriptions && ecDescriptions[customCode]) ? ecDescriptions[customCode] : '';
+                    unmappedRows.push([customCode, desc, now()]);
                     skipped++;
                     continue;
                 }
@@ -222,6 +234,8 @@ function syncPrices() {
             Utilities.sleep(DELAY_MS);
         }
 
+        clearSyncProgress_();
+
         // ── Step 6. 매핑테이블 갱신 ──────────────────────────
         if (newMappingRows.length > 0) {
             writeMappingTable(G_SS, newMappingRows);
@@ -229,10 +243,17 @@ function syncPrices() {
             logs.push(`[${now()}] Step6: 매핑테이블 ${newMappingRows.length}건 갱신`);
         }
 
+        if (unmappedRows.length > 0) {
+            writeUnmappedSheet(G_SS, unmappedRows);
+            Logger.log(`Step6: 미매핑 ${unmappedRows.length}건 기록`);
+            logs.push(`[${now()}] Step6: 미매핑 ${unmappedRows.length}건 기록`);
+        }
+
     } catch (e) {
         errors++;
         Logger.log('오류 발생: ' + e.message + '\n' + (e.stack || ''));
         logs.push(`[${now()}] 오류: ${e.message}`);
+        notifyAdmin_(G_CFG, `syncPrices 실행 실패: ${e.message}`);
     }
 
     // ── Step 7. 실행로그 기록 ─────────────────────────────
@@ -241,6 +262,10 @@ function syncPrices() {
     logs.push(summary);
     Logger.log(summary);
     if (G_SS) writeLog(G_SS, start, updated, skipped, errors, logs.join('\n'));
+
+    if (errors > 0) {
+        notifyAdmin_(G_CFG, `syncPrices 오류 발생: ${errors}건\n${summary}`);
+    }
 }
 
 
@@ -252,14 +277,16 @@ function createTrigger() {
     const triggers = ScriptApp.getProjectTriggers();
     for (const t of triggers) {
         const fn = t.getHandlerFunction();
-        if (fn === 'syncPrices' || fn === 'buildCafe24Cache') {
+        if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts') {
             ScriptApp.deleteTrigger(t);
         }
     }
     ScriptApp.newTrigger('buildCafe24Cache').timeBased().everyDays(1).create();
+    ScriptApp.newTrigger('checkNewProducts').timeBased().everyHours(2).create();
     ScriptApp.newTrigger('syncPrices').timeBased().everyHours(1).create();
-    Logger.log('✅ buildCafe24Cache 매일 1회, syncPrices 매 60분 자동 트리거가 생성되었습니다.');
+    Logger.log('✅ buildCafe24Cache 매일 1회, checkNewProducts 2시간마다, syncPrices 매 60분 자동 트리거가 생성되었습니다.');
 }
+
 
 
 // ════════════════════════════════════════════════════════
@@ -279,24 +306,46 @@ function tryRefreshAndRetry_() {
 }
 
 /** GET — 401 자동 재시도 */
+
+// 연속 실패 카운터 관리
+function recordApiFailure_(cfg, message) {
+    G_CONSEC_FAIL += 1;
+    if (G_CONSEC_FAIL >= 5) {
+        notifyAdmin_(cfg, `카페24 API 연속 실패 ${G_CONSEC_FAIL}회 이상: ${message}`);
+        // 중복 알림 방지용 리셋
+        G_CONSEC_FAIL = 0;
+    }
+}
+function recordApiSuccess_() {
+    G_CONSEC_FAIL = 0;
+}
+
 function c24Get(url, apiVersion) {
     const res = _rawGet(url, apiVersion, G_TOKEN);
     if (res.status === 401) {
-        try { tryRefreshAndRetry_(); return _rawGet(url, apiVersion, G_TOKEN); }
-        catch (e) { Logger.log('[c24Get] 토큰 재발급 실패: ' + e.message); return res; }
+        try { tryRefreshAndRetry_(); const r2 = _rawGet(url, apiVersion, G_TOKEN);
+            if (!r2.ok) recordApiFailure_(G_CFG, `GET 실패 status=${r2.status}`); else recordApiSuccess_();
+            return r2;
+        } catch (e) { Logger.log('[c24Get] 토큰 재발급 실패: ' + e.message); return res; }
     }
+    if (!res.ok) recordApiFailure_(G_CFG, `GET 실패 status=${res.status}`); else recordApiSuccess_();
     return res;
 }
+
 
 /** PUT — 401 자동 재시도 */
 function c24Put(url, apiVersion, payload) {
     const res = _rawPut(url, apiVersion, G_TOKEN, payload);
     if (res.status === 401) {
-        try { tryRefreshAndRetry_(); return _rawPut(url, apiVersion, G_TOKEN, payload); }
-        catch (e) { Logger.log('[c24Put] 토큰 재발급 실패: ' + e.message); return res; }
+        try { tryRefreshAndRetry_(); const r2 = _rawPut(url, apiVersion, G_TOKEN, payload);
+            if (!r2.ok) recordApiFailure_(G_CFG, `PUT 실패 status=${r2.status}`); else recordApiSuccess_();
+            return r2;
+        } catch (e) { Logger.log('[c24Put] 토큰 재발급 실패: ' + e.message); return res; }
     }
+    if (!res.ok) recordApiFailure_(G_CFG, `PUT 실패 status=${res.status}`); else recordApiSuccess_();
     return res;
 }
+
 
 /** product_no 기준 price 직접 업데이트 (variant 미매칭 폴백) */
 function updateProductPriceDirect(mallId, apiVersion, productNo, price) {
@@ -306,15 +355,52 @@ function updateProductPriceDirect(mallId, apiVersion, productNo, price) {
 }
 
 function _rawGet(url, apiVersion, token) {
-    const res = UrlFetchApp.fetch(url, {
+    const doGet = () => UrlFetchApp.fetch(url, {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}`, 'X-Cafe24-Api-Version': apiVersion },
         muteHttpExceptions: true,
         validateHttpsCertificates: false,
     });
-    const status = res.getResponseCode();
-    return { ok: status >= 200 && status < 300, status, body: res.getContentText() };
+
+    const backoffs = [1000, 2000, 4000, 8000];
+    for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+            const res = doGet();
+            const status = res.getResponseCode();
+            const body = res.getContentText();
+
+            if (status === 412) {
+                Logger.log(`[rawGet] 412 발생. 조건/요청 로그 저장: url=${url}`);
+            }
+            if (status === 429 || status === 412) {
+                if (attempt < 3) {
+                    const waitMs = backoffs[attempt];
+                    Logger.log(`[rawGet] ${status} 발생. ${waitMs}ms 후 재시도 (${attempt + 1}/3)`);
+                    Utilities.sleep(waitMs);
+                    continue;
+                }
+            }
+
+            return { ok: status >= 200 && status < 300, status, body };
+        } catch (e) {
+            const msg = String(e && e.message ? e.message : e);
+            if (msg.toLowerCase().includes('address unavailable')) {
+                Logger.log('[rawGet] Address unavailable. 5초 후 1회 재시도...');
+                Utilities.sleep(5000);
+                try {
+                    const res = doGet();
+                    const status = res.getResponseCode();
+                    return { ok: status >= 200 && status < 300, status, body: res.getContentText() };
+                } catch (e2) {
+                    return { ok: false, status: 0, body: String(e2 && e2.message ? e2.message : e2) };
+                }
+            }
+            return { ok: false, status: 0, body: msg };
+        }
+    }
+    return { ok: false, status: 0, body: 'retry_exceeded' };
 }
+
 
 function _rawPut(url, apiVersion, token, payload) {
     const doPut = () => UrlFetchApp.fetch(url, {
@@ -329,26 +415,45 @@ function _rawPut(url, apiVersion, token, payload) {
         validateHttpsCertificates: false,
     });
 
-    try {
-        const res = doPut();
-        const status = res.getResponseCode();
-        return { ok: status >= 200 && status < 300, status, body: res.getContentText() };
-    } catch (e) {
-        const msg = String(e && e.message ? e.message : e);
-        if (msg.toLowerCase().includes('address unavailable')) {
-            Logger.log('[rawPut] Address unavailable. 5초 후 1회 재시도...');
-            Utilities.sleep(5000);
-            try {
-                const res = doPut();
-                const status = res.getResponseCode();
-                return { ok: status >= 200 && status < 300, status, body: res.getContentText() };
-            } catch (e2) {
-                return { ok: false, status: 0, body: String(e2 && e2.message ? e2.message : e2) };
+    const backoffs = [1000, 2000, 4000, 8000];
+    for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+            const res = doPut();
+            const status = res.getResponseCode();
+            const body = res.getContentText();
+
+            if (status === 412) {
+                Logger.log(`[rawPut] 412 발생. 조건/요청 로그 저장: url=${url} payload=${JSON.stringify(payload)}`);
             }
+            if (status === 429 || status === 412) {
+                if (attempt < 3) {
+                    const waitMs = backoffs[attempt];
+                    Logger.log(`[rawPut] ${status} 발생. ${waitMs}ms 후 재시도 (${attempt + 1}/3)`);
+                    Utilities.sleep(waitMs);
+                    continue;
+                }
+            }
+
+            return { ok: status >= 200 && status < 300, status, body };
+        } catch (e) {
+            const msg = String(e && e.message ? e.message : e);
+            if (msg.toLowerCase().includes('address unavailable')) {
+                Logger.log('[rawPut] Address unavailable. 5초 후 1회 재시도...');
+                Utilities.sleep(5000);
+                try {
+                    const res = doPut();
+                    const status = res.getResponseCode();
+                    return { ok: status >= 200 && status < 300, status, body: res.getContentText() };
+                } catch (e2) {
+                    return { ok: false, status: 0, body: String(e2 && e2.message ? e2.message : e2) };
+                }
+            }
+            return { ok: false, status: 0, body: msg };
         }
-        return { ok: false, status: 0, body: msg };
     }
+    return { ok: false, status: 0, body: 'retry_exceeded' };
 }
+
 
 /** Refresh Token → 새 Access Token */
 function refreshCafe24Token(cfg) {
@@ -454,6 +559,65 @@ function writeCafe24SheetBatch(ss, rows, reset) {
 }
 
 /** 카페24 전체 상품/옵션 조회 (1회 100건씩) */
+
+/** 신규 상품 증분 동기화 */
+function checkNewProducts() {
+    const ss = getSpreadsheet();
+    const cfg = readConfig(ss);
+    G_CFG = cfg;
+    G_SS = ss;
+    G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || '';
+
+    // 토큰 자동 갱신 시도
+    try {
+        const refreshed = ensureTokenRefreshIfNeeded_(ss, cfg);
+        if (refreshed) G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
+    } catch (e) {
+        Logger.log('[checkNewProducts] 토큰 갱신 실패: ' + e.message);
+        notifyAdmin_(cfg, `checkNewProducts 토큰 갱신 실패: ${e.message}`);
+    }
+
+    // 이카운트 가격 전체 조회 (PROD_CD 목록 확보)
+    const sessionId = ecLogin(cfg);
+    const { prices: ecPrices, descriptions: ecDescriptions } = fetchEcountPrices(cfg, sessionId);
+
+    // 매핑테이블 캐시 로드
+    const mappingCache = readMappingTable(ss);
+
+    const mallId = cfg[KEY.C24_MALL_ID];
+    const apiVer = cfg[KEY.C24_API_VERSION] || '2025-12-01';
+
+    const newRows = [];
+    const newMappings = [];
+
+    for (const [prodCd, price] of Object.entries(ecPrices)) {
+        if (mappingCache[prodCd]) continue;
+
+        // 신규 PROD_CD: 카페24 캐시 시트에서 검색
+        const cache = readCafe24SheetCache(ss);
+        const auto = cache[prodCd];
+        if (auto) {
+            mappingCache[prodCd] = auto;
+            newMappings.push([prodCd, auto.productNo, auto.variantCode, auto.cachedPrice, now(), '자동등록(증분)']);
+            continue;
+        }
+
+        // 캐시에 없으면 카페24 전체 조회 대신 product_no 미정 → 스킵 기록
+        const desc = ecDescriptions[prodCd] || '';
+        newRows.push([prodCd, desc, now()]);
+    }
+
+    if (newMappings.length > 0) {
+        writeMappingTable(ss, newMappings);
+        Logger.log(`[checkNewProducts] 신규 매핑 ${newMappings.length}건 등록`);
+    }
+
+    if (newRows.length > 0) {
+        writeUnmappedSheet(ss, newRows);
+        Logger.log(`[checkNewProducts] 미매핑 ${newRows.length}건 기록`);
+    }
+}
+
 function buildCafe24Cache() {
     const ss = getSpreadsheet();
     const cfg = readConfig(ss);
@@ -461,17 +625,16 @@ function buildCafe24Cache() {
     G_SS = ss;
     G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || '';
 
-    // 토큰 갱신 시도
+    // 토큰 자동 갱신 시도 (2시간 이내 만료)
     try {
-        const r = refreshCafe24Token(cfg);
-        G_TOKEN = r.access_token;
-        setConfig(ss, KEY.C24_ACCESS_TOKEN, G_TOKEN);
-        if (r.refresh_token) setConfig(ss, KEY.C24_REFRESH_TOKEN, r.refresh_token);
-        G_CFG[KEY.C24_ACCESS_TOKEN] = G_TOKEN;
-        if (r.refresh_token) G_CFG[KEY.C24_REFRESH_TOKEN] = r.refresh_token;
-        Logger.log('[buildCafe24Cache] 토큰 갱신 성공');
+        const refreshed = ensureTokenRefreshIfNeeded_(ss, cfg);
+        if (refreshed) {
+            G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
+            Logger.log('[buildCafe24Cache] 토큰 자동 갱신 성공');
+        }
     } catch (e) {
         Logger.log('[buildCafe24Cache] 토큰 갱신 실패 (기존 사용): ' + e.message);
+        notifyAdmin_(cfg, `buildCafe24Cache 토큰 갱신 실패: ${e.message}\n재인증 필요: OAuth 재인증 후 새 토큰을 [설정] 시트에 반영하세요.`);
     }
 
     const mallId = cfg[KEY.C24_MALL_ID];
@@ -583,14 +746,16 @@ function fetchEcountPrices(cfg, sessionId) {
     const res = post(url, {});
     const items = res?.Data?.Result ?? [];
     const map = {};
+    const descMap = {};
     for (const item of items) {
         const cd = String(item.PROD_CD || '');
         const des = String(item.PROD_DES || '');
         if (cd.includes('(1)') && des.includes('◈')) {
             map[cd] = parseFloat(String(item[priceField] || '0').replace(/,/g, '')) || 0;
+            descMap[cd] = des;
         }
     }
-    return map;
+    return { prices: map, descriptions: descMap };
 }
 
 function post(url, payload) {
@@ -668,6 +833,21 @@ function writeMappingTable(ss, rows) {
 }
 
 /** [실행로그] 시트에 행 추가 */
+
+/** [미매핑] 시트 기록 */
+function writeUnmappedSheet(ss, rows) {
+    let sh = ss.getSheetByName('미매핑');
+    if (!sh) sh = ss.insertSheet('미매핑');
+    const header = ['ecount_prod_cd', 'ecount_prod_des', '날짜'];
+    if (sh.getLastRow() === 0) {
+        sh.getRange(1, 1, 1, header.length).setValues([header]);
+    }
+    if (rows.length > 0) {
+        const startRow = sh.getLastRow() + 1;
+        sh.getRange(startRow, 1, rows.length, header.length).setValues(rows);
+    }
+}
+
 function writeLog(ss, start, updated, skipped, errors, detail) {
     const sh = ss.getSheetByName(SH.LOG);
     if (!sh) return;
@@ -677,8 +857,108 @@ function writeLog(ss, start, updated, skipped, errors, detail) {
     ]);
 }
 
+
+// syncPrices 진행 상태 저장
+function getSyncProgress_() {
+    const props = PropertiesService.getScriptProperties();
+    return parseInt(props.getProperty('SYNC_PROGRESS_IDX') || '0', 10);
+}
+function setSyncProgress_(idx) {
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty('SYNC_PROGRESS_IDX', String(idx));
+}
+function clearSyncProgress_() {
+    const props = PropertiesService.getScriptProperties();
+    props.deleteProperty('SYNC_PROGRESS_IDX');
+}
+
 function now() {
     return Utilities.formatDate(new Date(), 'Asia/Seoul', 'HH:mm:ss');
+}
+
+// 장애 알림 메일 (ADMIN_EMAIL)
+function notifyAdmin_(cfg, message) {
+    if (!cfg) return;
+    const email = cfg[KEY.ADMIN_EMAIL];
+    if (!email) return;
+    try {
+        MailApp.sendEmail(email, '[Ecount-Cafe24] 동기화 장애 알림', message);
+    } catch (e) {
+        Logger.log('[notifyAdmin] 메일 발송 실패: ' + e.message);
+    }
+}
+
+// 토큰 자동 갱신 및 만료 사전 알림
+function ensureTokenRefreshIfNeeded_(ss, cfg) {
+    if (!cfg) return false;
+
+    const accessExp = cfg[KEY.TOKEN_EXPIRES_AT];
+    const refreshExp = cfg[KEY.REFRESH_EXPIRES_AT];
+    const now = new Date();
+
+    const parseDate = (v) => {
+        if (!v) return null;
+        const dt = new Date(String(v));
+        return isNaN(dt.getTime()) ? null : dt;
+    };
+
+    const accessDt = parseDate(accessExp);
+    const refreshDt = parseDate(refreshExp);
+
+    // refresh_token 만료 7일 전 경고
+    if (refreshDt) {
+        const daysLeft = Math.ceil((refreshDt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysLeft === 7) {
+            notifyAdmin_(cfg, `Refresh token 만료 7일 전 경고: (${refreshExp})\n재인증 준비 필요`);
+        }
+        if (daysLeft <= 0) {
+            notifyAdmin_(cfg, `Refresh token 만료됨 (${refreshExp})\n재인증 필요: OAuth 재인증 후 새 토큰을 [설정] 시트에 반영하세요.`);
+        }
+    }
+
+    // access_token 만료 2시간 전이면 자동 갱신
+    if (accessDt) {
+        const hoursLeft = (accessDt.getTime() - now.getTime()) / (1000 * 60 * 60);
+        if (hoursLeft <= 2) {
+            const r = refreshCafe24Token(cfg);
+            cfg[KEY.C24_ACCESS_TOKEN] = r.access_token;
+            if (r.refresh_token) cfg[KEY.C24_REFRESH_TOKEN] = r.refresh_token;
+            setConfig(ss, KEY.C24_ACCESS_TOKEN, r.access_token);
+            if (r.refresh_token) setConfig(ss, KEY.C24_REFRESH_TOKEN, r.refresh_token);
+            if (r.expires_at) setConfig(ss, KEY.TOKEN_EXPIRES_AT, r.expires_at);
+            if (r.refresh_token_expires_at) setConfig(ss, KEY.REFRESH_EXPIRES_AT, r.refresh_token_expires_at);
+            Logger.log('자동 토큰 갱신 완료 (2시간 이내 만료)');
+            return true;
+        }
+    }
+    return false;
+}
+
+// 테스트 알림 메일 발송
+function testAdminEmail() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const cfg = readConfig(ss);
+    notifyAdmin_(cfg, '테스트 알림: 이메일 발송 확인용 메시지입니다.');
+    Logger.log('테스트 알림 발송 완료');
+}
+
+// 설정 시트에 토큰 만료 키 추가/보정
+function ensureTokenExpiryKeys() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sh = ss.getSheetByName(SH.CONFIG);
+    if (!sh) { Logger.log('[ensureTokenExpiryKeys] 설정 시트 없음'); return; }
+    const data = sh.getDataRange().getValues();
+    const keys = data.map(r => String(r[0] || '').trim());
+
+    const ensureRow = (key) => {
+        if (keys.includes(key)) return;
+        sh.appendRow([key, '']);
+        keys.push(key);
+    };
+
+    ensureRow(KEY.TOKEN_EXPIRES_AT);
+    ensureRow(KEY.REFRESH_EXPIRES_AT);
+    Logger.log('[ensureTokenExpiryKeys] TOKEN_EXPIRES_AT/REFRESH_EXPIRES_AT 추가 완료');
 }
 
 // 특정 품목의 가격 비교 로그 출력 (매핑테이블)
