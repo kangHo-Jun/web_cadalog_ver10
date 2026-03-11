@@ -4,6 +4,7 @@
  * 수동으로 카테고리 번호를 등록해야 합니다.
  *
  * 소스: src/config/quote-categories.csv
+ * 빌드 환경에서 fs 사용이 불가해 현재는 CSV 내용을 정적으로 반영합니다.
  */
 
 export interface QuoteCategory {
@@ -14,44 +15,71 @@ export interface QuoteCategory {
   parent_category_no?: number | null; // 부모 카테고리 번호
 }
 
-import fs from 'fs';
-import path from 'path';
-
-function parseCsvLine(line: string): string[] {
-  // Simple CSV parser (no quoted commas in this file)
-  return line.split(',').map((part) => part.trim());
-}
-
-function loadQuoteCategories(): QuoteCategory[] {
-  try {
-    const csvPath = path.join(process.cwd(), 'src', 'config', 'quote-categories.csv');
-    const raw = fs.readFileSync(csvPath, 'utf8');
-    const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
-    if (lines.length <= 1) return [];
-
-    const rows = lines.slice(1); // skip header
-    const categories: QuoteCategory[] = [];
-
-    for (const row of rows) {
-      const [category_no, category_name, display_name, category_depth, parent_category_no] = parseCsvLine(row);
-      if (!category_no) continue;
-      categories.push({
-        category_no: Number(category_no),
-        category_name,
-        display_name,
-        category_depth: Number(category_depth || 0),
-        parent_category_no: parent_category_no ? Number(parent_category_no) : null,
-      });
-    }
-
-    return categories;
-  } catch (error) {
-    console.error('Failed to load quote-categories.csv:', error);
-    return [];
-  }
-}
-
-export const QUOTE_CATEGORIES: QuoteCategory[] = loadQuoteCategories();
+export const QUOTE_CATEGORIES: QuoteCategory[] = [
+  {
+    category_no: 192,
+    category_name: '합판/MDF/보드',
+    display_name: '합판/MDF/보드',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 25,
+    category_name: '각재/목재',
+    display_name: '각재/목재',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 50,
+    category_name: '석고/텍스',
+    display_name: '석고/텍스',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 26,
+    category_name: '단열재/흡음재',
+    display_name: '단열재/흡음재',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 203,
+    category_name: '집성목',
+    display_name: '집성목',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 197,
+    category_name: '바닥재/특수목',
+    display_name: '바닥재/특수목',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 223,
+    category_name: '철물/부자재',
+    display_name: '철물/부자재',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 349,
+    category_name: '재단비',
+    display_name: '재단비',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+  {
+    category_no: 350,
+    category_name: '운반비',
+    display_name: '운반비',
+    category_depth: 1,
+    parent_category_no: null,
+  },
+];
 
 // 카테고리 번호 배열 (API 호출용)
 export const QUOTE_CATEGORY_NOS = QUOTE_CATEGORIES.map(c => c.category_no);
