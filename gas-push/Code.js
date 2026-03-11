@@ -173,8 +173,8 @@ function syncPrices() {
                 continue;
             }
 
-            Logger.log(`변동: ${customCode} | ${cachedPrice} → ${ecPrice}`);
-            logs.push(`[${now()}] 변동: ${customCode} | ${cachedPrice} → ${ecPrice}`);
+            Logger.log(`변동: ${customCode} | ${cachedPrice} → ${priceWithVat} (VAT 포함)`);
+            logs.push(`[${now()}] 변동: ${customCode} | ${cachedPrice} → ${priceWithVat} (VAT 포함)`);
 
             if (G_CFG[KEY.DRY_RUN] === 'true') {
                 newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), autoRegistered ? '자동등록+DRY_RUN' : 'DRY_RUN']);
@@ -186,7 +186,7 @@ function syncPrices() {
             if (!variantCode) {
                 const pRes = updateProductPriceDirect(mallId, apiVer, productNo, priceWithVat);
                 if (pRes.ok) {
-                    Logger.log(`단품 업데이트 성공: ${customCode} (${pRes.status})`);
+                    Logger.log(`단품 업데이트 성공: ${customCode} | product_no=${productNo} | ${cachedPrice} → ${priceWithVat} (${pRes.status})`);
                     logs.push(`  └ 성공(단품) (${pRes.status}): ${customCode}`);
                     newMappingRows.push([customCode, productNo, '', priceWithVat, now(), '성공(단품)']);
                     entry.cachedPrice = priceWithVat;
@@ -203,11 +203,11 @@ function syncPrices() {
 
             // 카페24 직접 PUT (product_no + variant_code 사용)
             const url = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants/${variantCode}`;
-            const payload = { request: { variant: { additional_amount: priceWithVat } } };
+            const payload = { request: { variant: { additional_amount: String(priceWithVat) } } };
             const res = c24Put(url, apiVer, payload);
 
             if (res.ok) {
-                Logger.log(`업데이트 성공: ${customCode} (${res.status})`);
+                Logger.log(`업데이트 성공: ${customCode} | product_no=${productNo} | variant=${variantCode} | ${cachedPrice} → ${priceWithVat} (${res.status})`);
                 logs.push(`  └ 성공 (${res.status}): ${customCode}`);
                 newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), autoRegistered ? '자동등록+성공' : '성공']);
                 entry.cachedPrice = priceWithVat;
@@ -679,6 +679,73 @@ function writeLog(ss, start, updated, skipped, errors, detail) {
 
 function now() {
     return Utilities.formatDate(new Date(), 'Asia/Seoul', 'HH:mm:ss');
+}
+
+// 특정 품목의 가격 비교 로그 출력 (매핑테이블)
+function printPriceCheck() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sh = ss.getSheetByName('매핑테이블');
+    if (!sh) { Logger.log('[printPriceCheck] 매핑테이블 시트 없음'); return; }
+    const data = sh.getDataRange().getValues();
+    if (data.length <= 1) { Logger.log('[printPriceCheck] 데이터 없음'); return; }
+    const header = data[0].map(h => String(h || ''));
+    const norm = s => s.toLowerCase().replace(/\s+/g, '');
+    const headerNorm = header.map(norm);
+
+    const findIdx = (candidates) => {
+        for (const c of candidates) {
+            const i = headerNorm.indexOf(norm(c));
+            if (i >= 0) return i;
+        }
+        return -1;
+    };
+
+    const idxCode = findIdx(['ecount_prod_cd', 'prod_cd', '품목코드', '이카운트품목코드']);
+    const idxOut = findIdx(['ecount_out_price2', 'out_price2', '2단가', '이카운트_2단가']);
+    const idxPrev = findIdx(['ecount_prev_price', 'prev_price', '이전단가', '이전가격']);
+
+    if (idxCode < 0 || idxOut < 0 || idxPrev < 0) {
+        Logger.log('[printPriceCheck] 컬럼 인덱스 찾기 실패');
+        Logger.log('[printPriceCheck] 헤더: ' + header.join(' | '));
+        return;
+    }
+
+    for (let i = 1; i < data.length; i++) {
+        if (String(data[i][idxCode]).trim() === '(1)200자이02방수936') {
+            const out = data[i][idxOut];
+            const prev = data[i][idxPrev];
+            Logger.log(`out_price2=${out}, prev_price=${prev}, 동일여부=${String(out) === String(prev)}`);
+            return;
+        }
+    }
+    Logger.log('[printPriceCheck] 대상 코드 없음: (1)200자이02방수936');
+}
+
+// 특정 품목의 cached_price 출력 (매핑테이블)
+function printCachedPrice() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sh = ss.getSheetByName('매핑테이블');
+    if (!sh) { Logger.log('[printCachedPrice] 매핑테이블 시트 없음'); return; }
+    const data = sh.getDataRange().getValues();
+    if (data.length <= 1) { Logger.log('[printCachedPrice] 데이터 없음'); return; }
+
+    const header = data[0].map(h => String(h || ''));
+    const idxCode = header.indexOf('custom_variant_code');
+    const idxCached = header.indexOf('cached_price');
+
+    if (idxCode < 0 || idxCached < 0) {
+        Logger.log('[printCachedPrice] 컬럼 인덱스 찾기 실패');
+        Logger.log('[printCachedPrice] 헤더: ' + header.join(' | '));
+        return;
+    }
+
+    for (let i = 1; i < data.length; i++) {
+        if (String(data[i][idxCode]).trim() === '(1)200자이02방수936') {
+            Logger.log(`cached_price=${data[i][idxCached]}`);
+            return;
+        }
+    }
+    Logger.log('[printCachedPrice] 대상 코드 없음: (1)200자이02방수936');
 }
 
 
