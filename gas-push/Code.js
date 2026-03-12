@@ -83,8 +83,8 @@ function syncPrices() {
         Logger.log('Step2: 이카운트 로그인...');
         const sessionId = ecLogin(G_CFG);
         const { prices: ecPrices, descriptions: ecDescriptions } = fetchEcountPrices(G_CFG, sessionId);
-        Logger.log(`Step2: 이카운트 ${Object.keys(ecPrices).length}건 조회 완료`);
-        logs.push(`[${now()}] Step2: 이카운트 ${Object.keys(ecPrices).length}건`);
+        Logger.log(`Step2: 이카운트 ${Object.keys(ecPrices)?.length}건 조회 완료`);
+        logs.push(`[${now()}] Step2: 이카운트 ${Object.keys(ecPrices)?.length}건`);
 
         // ── Step 2.1 토큰 자동 갱신/사전 알림 ─────────────────
         try {
@@ -103,7 +103,7 @@ function syncPrices() {
         // ── Step 4. 매핑테이블 로드 ───────────────────────────
         Logger.log('Step4: 매핑테이블 로드...');
         const mappingCache = readMappingTable(G_SS);
-        const cacheSize = Object.keys(mappingCache).length;
+        const cacheSize = Object.keys(mappingCache)?.length;
         Logger.log(`Step4: 매핑테이블 ${cacheSize}건 로드`);
         logs.push(`[${now()}] Step4: 매핑테이블 ${cacheSize}건 로드`);
 
@@ -119,7 +119,7 @@ function syncPrices() {
         }
 
         const cafe24Cache = readCafe24SheetCache(G_SS);
-        Logger.log(`Step4.1: 카페24 캐시 로드 ${Object.keys(cafe24Cache).length}건`);
+        Logger.log(`Step4.1: 카페24 캐시 로드 ${Object.keys(cafe24Cache)?.length}건`);
 
         // 디버그: 특정 product_no 전체 목록 포함 여부 확인
         const debugProductNo = G_CFG[KEY.DEBUG_PRODUCT_NO];
@@ -139,9 +139,9 @@ function syncPrices() {
 
         const entries = Object.entries(ecPrices);
         const startIdx = getSyncProgress_();
-        Logger.log(`Step5: 진행 시작 인덱스=${startIdx}/${entries.length}`);
+        Logger.log(`Step5: 진행 시작 인덱스=${startIdx}/${entries?.length}`);
 
-        for (let i = startIdx; i < entries.length; i++) {
+        for (let i = startIdx; i < entries?.length; i++) {
             const [customCode, ecPrice] = entries[i];
             if (new Date() - start > TIME_LIMIT_MS) {
                 Logger.log(`시간 제한 접근 (${((new Date() - start) / 1000).toFixed(0)}s) → 진행 상태 저장 후 중단`);
@@ -177,16 +177,19 @@ function syncPrices() {
 
             const { productNo, variantCode, cachedPrice } = entry;
             const priceWithVat = Math.round(ecPrice * 1.1);
+            const cafe24Current = (cafe24Cache && cafe24Cache[customCode] && cafe24Cache[customCode].cachedPrice != null)
+                ? cafe24Cache[customCode].cachedPrice
+                : cachedPrice;
 
             // 가격 변동 없으면 스킵
-            if (Math.round(cachedPrice) === priceWithVat) {
-                newMappingRows.push([customCode, productNo, variantCode, cachedPrice, now(), autoRegistered ? '자동등록+스킵(변동없음)' : '스킵(변동없음)']);
+            if (Math.round(cafe24Current) === priceWithVat) {
+                newMappingRows.push([customCode, productNo, variantCode, cafe24Current, now(), autoRegistered ? '자동등록+스킵(변동없음)' : '스킵(변동없음)']);
                 skipped++;
                 continue;
             }
 
-            Logger.log(`변동: ${customCode} | ${cachedPrice} → ${priceWithVat} (VAT 포함)`);
-            logs.push(`[${now()}] 변동: ${customCode} | ${cachedPrice} → ${priceWithVat} (VAT 포함)`);
+            Logger.log(`변동: ${customCode} | ${cafe24Current} → ${priceWithVat} (VAT 포함)`);
+            logs.push(`[${now()}] 변동: ${customCode} | ${cafe24Current} → ${priceWithVat} (VAT 포함)`);
 
             if (G_CFG[KEY.DRY_RUN] === 'true') {
                 newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), autoRegistered ? '자동등록+DRY_RUN' : 'DRY_RUN']);
@@ -237,16 +240,16 @@ function syncPrices() {
         clearSyncProgress_();
 
         // ── Step 6. 매핑테이블 갱신 ──────────────────────────
-        if (newMappingRows.length > 0) {
+        if (newMappingRows?.length > 0) {
             writeMappingTable(G_SS, newMappingRows);
-            Logger.log(`Step6: 매핑테이블 ${newMappingRows.length}건 갱신`);
-            logs.push(`[${now()}] Step6: 매핑테이블 ${newMappingRows.length}건 갱신`);
+            Logger.log(`Step6: 매핑테이블 ${newMappingRows?.length}건 갱신`);
+            logs.push(`[${now()}] Step6: 매핑테이블 ${newMappingRows?.length}건 갱신`);
         }
 
-        if (unmappedRows.length > 0) {
+        if (unmappedRows?.length > 0) {
             writeUnmappedSheet(G_SS, unmappedRows);
-            Logger.log(`Step6: 미매핑 ${unmappedRows.length}건 기록`);
-            logs.push(`[${now()}] Step6: 미매핑 ${unmappedRows.length}건 기록`);
+            Logger.log(`Step6: 미매핑 ${unmappedRows?.length}건 기록`);
+            logs.push(`[${now()}] Step6: 미매핑 ${unmappedRows?.length}건 기록`);
         }
 
     } catch (e) {
@@ -490,12 +493,12 @@ function checkProductNoInCatalog(mallId, apiVersion, targetNo) {
             break;
         }
         const products = JSON.parse(res.body).products || [];
-        if (products.length === 0) break;
-        total += products.length;
+        if (products?.length === 0) break;
+        total += products?.length;
         if (products.some(p => String(p.product_no) === String(targetNo))) {
             found = true;
         }
-        if (products.length < C24_PAGE_SIZE) break;
+        if (products?.length < C24_PAGE_SIZE) break;
         offset += C24_PAGE_SIZE;
         Utilities.sleep(300);
     }
@@ -530,8 +533,8 @@ function readCafe24SheetCache(ss) {
     const cache = {};
     if (!sh) return cache;
     const data = sh.getDataRange().getValues();
-    if (data.length <= 1) return cache;
-    for (let i = 1; i < data.length; i++) {
+    if (data?.length <= 1) return cache;
+    for (let i = 1; i < data?.length; i++) {
         const productNo = String(data[i][0] || '').trim();
         const customCode = String(data[i][3] || '').trim();
         const variantCode = String(data[i][4] || '').trim();
@@ -550,11 +553,11 @@ function writeCafe24SheetBatch(ss, rows, reset) {
     const header = ['product_no', 'product_code', 'product_name', 'custom_variant_code', 'variant_code', 'additional_amount'];
     if (reset) {
         sh.clearContents();
-        sh.getRange(1, 1, 1, header.length).setValues([header]);
+        sh.getRange(1, 1, 1, header?.length).setValues([header]);
     }
-    if (rows.length > 0) {
+    if (rows?.length > 0) {
         const startRow = sh.getLastRow() + 1;
-        sh.getRange(startRow, 1, rows.length, header.length).setValues(rows);
+        sh.getRange(startRow, 1, rows?.length, header?.length).setValues(rows);
     }
 }
 
@@ -607,14 +610,14 @@ function checkNewProducts() {
         newRows.push([prodCd, desc, now()]);
     }
 
-    if (newMappings.length > 0) {
+    if (newMappings?.length > 0) {
         writeMappingTable(ss, newMappings);
-        Logger.log(`[checkNewProducts] 신규 매핑 ${newMappings.length}건 등록`);
+        Logger.log(`[checkNewProducts] 신규 매핑 ${newMappings?.length}건 등록`);
     }
 
-    if (newRows.length > 0) {
+    if (newRows?.length > 0) {
         writeUnmappedSheet(ss, newRows);
-        Logger.log(`[checkNewProducts] 미매핑 ${newRows.length}건 기록`);
+        Logger.log(`[checkNewProducts] 미매핑 ${newRows?.length}건 기록`);
     }
 }
 
@@ -666,9 +669,9 @@ function buildCafe24Cache() {
     }
 
     writeCafe24SheetBatch(ss, rows, offset === 0);
-    Logger.log(`[buildCafe24Cache] rows=${rows.length} 기록 완료`);
+    Logger.log(`[buildCafe24Cache] rows=${rows?.length} 기록 완료`);
 
-    if (products.length < limit) {
+    if (products?.length < limit) {
         setCafe24CacheState_(true, 0);
         Logger.log('[buildCafe24Cache] 캐시 완료');
     } else {
@@ -790,7 +793,7 @@ function setConfig(ss, key, value) {
     const sh = ss.getSheetByName(SH.CONFIG);
     if (!sh) return;
     const data = sh.getDataRange().getValues();
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0; i < data?.length; i++) {
         if (String(data[i][0]).trim() === key) {
             sh.getRange(i + 1, 2).setValue(value);
             SpreadsheetApp.flush();
@@ -809,8 +812,8 @@ function readMappingTable(ss) {
     const cache = {};
     if (!sh) return cache;
     const data = sh.getDataRange().getValues();
-    if (data.length <= 1) return cache; // 헤더만 있거나 비어있음
-    for (let i = 1; i < data.length; i++) { // 1행부터 (0행=헤더)
+    if (data?.length <= 1) return cache; // 헤더만 있거나 비어있음
+    for (let i = 1; i < data?.length; i++) { // 1행부터 (0행=헤더)
         const code = String(data[i][0] || '').trim();
         const productNo = String(data[i][1] || '').trim();
         const varCode = String(data[i][2] || '').trim();
@@ -828,8 +831,8 @@ function writeMappingTable(ss, rows) {
     if (!sh) { Logger.log('⚠️ [매핑테이블] 시트 없음'); return; }
     const header = ['custom_variant_code', 'product_no', 'variant_code', 'cached_price', '최근업데이트', '결과'];
     sh.clearContents();
-    sh.getRange(1, 1, 1, header.length).setValues([header]);
-    if (rows.length > 0) sh.getRange(2, 1, rows.length, header.length).setValues(rows);
+    sh.getRange(1, 1, 1, header?.length).setValues([header]);
+    if (rows?.length > 0) sh.getRange(2, 1, rows?.length, header?.length).setValues(rows);
 }
 
 /** [실행로그] 시트에 행 추가 */
@@ -840,11 +843,11 @@ function writeUnmappedSheet(ss, rows) {
     if (!sh) sh = ss.insertSheet('미매핑');
     const header = ['ecount_prod_cd', 'ecount_prod_des', '날짜'];
     if (sh.getLastRow() === 0) {
-        sh.getRange(1, 1, 1, header.length).setValues([header]);
+        sh.getRange(1, 1, 1, header?.length).setValues([header]);
     }
-    if (rows.length > 0) {
+    if (rows?.length > 0) {
         const startRow = sh.getLastRow() + 1;
-        sh.getRange(startRow, 1, rows.length, header.length).setValues(rows);
+        sh.getRange(startRow, 1, rows?.length, header?.length).setValues(rows);
     }
 }
 
@@ -877,6 +880,18 @@ function now() {
 }
 
 // 장애 알림 메일 (ADMIN_EMAIL)
+// 토큰 만료시각 자동 계산 저장
+function setTokenExpiry_(ss, cfg) {
+    const now = new Date();
+    const accessExp = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const refreshExp = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const fmt = (d) => Utilities.formatDate(d, 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ss");
+    setConfig(ss, KEY.TOKEN_EXPIRES_AT, fmt(accessExp));
+    setConfig(ss, KEY.REFRESH_EXPIRES_AT, fmt(refreshExp));
+    cfg[KEY.TOKEN_EXPIRES_AT] = fmt(accessExp);
+    cfg[KEY.REFRESH_EXPIRES_AT] = fmt(refreshExp);
+}
+
 function notifyAdmin_(cfg, message) {
     if (!cfg) return;
     const email = cfg[KEY.ADMIN_EMAIL];
@@ -895,6 +910,7 @@ function ensureTokenRefreshIfNeeded_(ss, cfg) {
     const accessExp = cfg[KEY.TOKEN_EXPIRES_AT];
     const refreshExp = cfg[KEY.REFRESH_EXPIRES_AT];
     const now = new Date();
+    Logger.log(`[token] TOKEN_EXPIRES_AT=${accessExp || ''} | REFRESH_EXPIRES_AT=${refreshExp || ''}`);
 
     const parseDate = (v) => {
         if (!v) return null;
@@ -904,6 +920,8 @@ function ensureTokenRefreshIfNeeded_(ss, cfg) {
 
     const accessDt = parseDate(accessExp);
     const refreshDt = parseDate(refreshExp);
+    if (!accessDt) Logger.log('[token] access token 만료시각 파싱 실패 또는 미설정');
+    if (!refreshDt) Logger.log('[token] refresh token 만료시각 파싱 실패 또는 미설정');
 
     // refresh_token 만료 7일 전 경고
     if (refreshDt) {
@@ -925,8 +943,8 @@ function ensureTokenRefreshIfNeeded_(ss, cfg) {
             if (r.refresh_token) cfg[KEY.C24_REFRESH_TOKEN] = r.refresh_token;
             setConfig(ss, KEY.C24_ACCESS_TOKEN, r.access_token);
             if (r.refresh_token) setConfig(ss, KEY.C24_REFRESH_TOKEN, r.refresh_token);
-            if (r.expires_at) setConfig(ss, KEY.TOKEN_EXPIRES_AT, r.expires_at);
-            if (r.refresh_token_expires_at) setConfig(ss, KEY.REFRESH_EXPIRES_AT, r.refresh_token_expires_at);
+            // 만료시각 자동 계산 저장
+            setTokenExpiry_(ss, cfg);
             Logger.log('자동 토큰 갱신 완료 (2시간 이내 만료)');
             return true;
         }
@@ -948,7 +966,7 @@ function ensureTokenExpiryKeys() {
     const sh = ss.getSheetByName(SH.CONFIG);
     if (!sh) { Logger.log('[ensureTokenExpiryKeys] 설정 시트 없음'); return; }
     const data = sh.getDataRange().getValues();
-    const keys = data.map(r => String(r[0] || '').trim());
+    const keys = data?.map(r => String(r[0] || '').trim());
 
     const ensureRow = (key) => {
         if (keys.includes(key)) return;
@@ -961,16 +979,27 @@ function ensureTokenExpiryKeys() {
     Logger.log('[ensureTokenExpiryKeys] TOKEN_EXPIRES_AT/REFRESH_EXPIRES_AT 추가 완료');
 }
 
+// 만료시각 키 존재 확인 + 즉시 저장 테스트
+function testTokenExpirySave() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const cfg = readConfig(ss);
+    ensureTokenExpiryKeys();
+    setTokenExpiry_(ss, cfg);
+    const cfg2 = readConfig(ss);
+    Logger.log(`[testTokenExpirySave] TOKEN_EXPIRES_AT=${cfg2[KEY.TOKEN_EXPIRES_AT] || ''}`);
+    Logger.log(`[testTokenExpirySave] REFRESH_EXPIRES_AT=${cfg2[KEY.REFRESH_EXPIRES_AT] || ''}`);
+}
+
 // 특정 품목의 가격 비교 로그 출력 (매핑테이블)
 function printPriceCheck() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sh = ss.getSheetByName('매핑테이블');
     if (!sh) { Logger.log('[printPriceCheck] 매핑테이블 시트 없음'); return; }
     const data = sh.getDataRange().getValues();
-    if (data.length <= 1) { Logger.log('[printPriceCheck] 데이터 없음'); return; }
-    const header = data[0].map(h => String(h || ''));
+    if (data?.length <= 1) { Logger.log('[printPriceCheck] 데이터 없음'); return; }
+    const header = data[0]?.map(h => String(h || ''));
     const norm = s => s.toLowerCase().replace(/\s+/g, '');
-    const headerNorm = header.map(norm);
+    const headerNorm = header?.map(norm);
 
     const findIdx = (candidates) => {
         for (const c of candidates) {
@@ -990,7 +1019,7 @@ function printPriceCheck() {
         return;
     }
 
-    for (let i = 1; i < data.length; i++) {
+    for (let i = 1; i < data?.length; i++) {
         if (String(data[i][idxCode]).trim() === '(1)200자이02방수936') {
             const out = data[i][idxOut];
             const prev = data[i][idxPrev];
@@ -1007,9 +1036,9 @@ function printCachedPrice() {
     const sh = ss.getSheetByName('매핑테이블');
     if (!sh) { Logger.log('[printCachedPrice] 매핑테이블 시트 없음'); return; }
     const data = sh.getDataRange().getValues();
-    if (data.length <= 1) { Logger.log('[printCachedPrice] 데이터 없음'); return; }
+    if (data?.length <= 1) { Logger.log('[printCachedPrice] 데이터 없음'); return; }
 
-    const header = data[0].map(h => String(h || ''));
+    const header = data[0]?.map(h => String(h || ''));
     const idxCode = header.indexOf('custom_variant_code');
     const idxCached = header.indexOf('cached_price');
 
@@ -1019,7 +1048,7 @@ function printCachedPrice() {
         return;
     }
 
-    for (let i = 1; i < data.length; i++) {
+    for (let i = 1; i < data?.length; i++) {
         if (String(data[i][idxCode]).trim() === '(1)200자이02방수936') {
             Logger.log(`cached_price=${data[i][idxCached]}`);
             return;
@@ -1072,7 +1101,7 @@ function setCustomVariantCodes() {
 
     let done = 0, skipped = 0, errors = 0;
 
-    for (let i = 1; i < data.length; i++) {  // 1행부터 (0=헤더)
+    for (let i = 1; i < data?.length; i++) {  // 1행부터 (0=헤더)
         const prodCd = String(data[i][0] || '').trim();
         const productNo = String(data[i][1] || '').trim();
         if (!prodCd || !productNo) continue;
@@ -1081,12 +1110,12 @@ function setCustomVariantCodes() {
         const variantsUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants?fields=variant_code,custom_variant_code`;
         const vRes = c24Get(variantsUrl, apiVer);
         if (!vRes.ok) {
-            Logger.log(`[${i}/${data.length - 1}] 조회실패: ${prodCd} | status=${vRes.status}`);
+            Logger.log(`[${i}/${data?.length - 1}] 조회실패: ${prodCd} | status=${vRes.status}`);
             errors++;
             continue;
         }
         const variants = JSON.parse(vRes.body).variants || [];
-        if (variants.length === 0) {
+        if (variants?.length === 0) {
             Logger.log(`[${i}] variant 없음: ${prodCd}`);
             skipped++;
             continue;
@@ -1116,7 +1145,7 @@ function setCustomVariantCodes() {
         });
 
         if (putRes.ok) {
-            Logger.log(`[${i}/${data.length - 1}] ✅ 등록: ${prodCd} → variant=${v.variant_code}`);
+            Logger.log(`[${i}/${data?.length - 1}] ✅ 등록: ${prodCd} → variant=${v.variant_code}`);
             done++;
         } else {
             Logger.log(`[${i}] ❌ 실패 (${putRes.status}): ${prodCd} | ${putRes.body.substring(0, 80)}`);
@@ -1146,7 +1175,7 @@ function populateRepairSheet() {
     // Python으로 생성된 variant_code_repair_map.json 기반
     const MAP_DATA = { "(1)100구조재A14": "1674", "(1)100구조재A16": "1675", "(1)100구조재A18": "1676", "(1)100구조재B110": "1677", "(1)100구조재B112": "1678", "(1)100구조재C22": "1679", "(1)100구조재C24": "1680", "(1)100구조재C26": "1681", "(1)100구조재C28": "1682", "(1)100구조재D212": "1684", "(1)100구조재E70각": "836", "(1)100구조재E90각": "896", "(1)100라왕301400원": "1801", "(1)100라왕심재": "1617", "(1)100라왕한치각": "1616", "(1)100라왕후지": "1618", "(1)100목망꽃바둑1015": "1403", "(1)100목망캡": "1107", "(1)100미송루바8자": "839", "(1)100방부목1120": "1000", "(1)100방부목295": "1000", "(1)100방부목3140": "1000", "(1)100방부목4A22": "1659", "(1)100방부목524": "1660", "(1)100방부목626": "1661", "(1)100방부목8212": "1664", "(1)100방부목91라티": "1177", "(1)100방부목944": "1665", "(1)100방킬8자": "877", "(1)100소송1303012": "1613", "(1)100소송2306912": "1614", "(1)100소송330308": "1611", "(1)100소송4203012": "1615", "(1)100소송53030121": "1614", "(1)100소송63069121": "1614", "(1)100자나무": "975", "(1)100편백루바18유": "1317", "(1)100편백루바8무": "1317", "(1)200A자이01일반93": "1415", "(1)200국산2차음1236": "1622", "(1)200자이02방수936": "1416", "(1)200자이03방화1236": "811", "(1)200자이04일반1236": "1552", "(1)200자이05일반938": "1415", "(1)200하국산방화1236": "1621", "(1)201CRC636": "1164", "(1)201CRC936": "1164", "(1)201석고텍스KCC": "1379", "(1)3001A2748BB": "1604", "(1)3001B448오징": "936", "(1)3001C4648BB": "1604", "(1)3001D4648알": "936", "(1)3001E8548BB": "1604", "(1)3001F8548MLH": "936", "(1)3001G38548콤": "1641", "(1)3001H11548BB": "1604", "(1)3001I11548MLH": "936", "(1)3001J11548콤": "1641", "(1)3001K11548다": "1642", "(1)3001L14548BB": "1604", "(1)3001M17548BB": "1604", "(1)3001Y코아18알": "787", "(1)3001Z코아18라": "787", "(1)300A12736B": "1371", "(1)300A1자작SBB4": "1604", "(1)300A24636B": "1371", "(1)300A2자작SBB6": "1604", "(1)300A38536B": "1371", "(1)300A3자작SBB9": "1604", "(1)300A48536알": "1371", "(1)300A4자작SBB12": "1604", "(1)300A511536B": "1371", "(1)300A5자작SBB15": "1604", "(1)300A611536M": "1371", "(1)300A6자작SBB18": "1604", "(1)300B1미송유48": "783", "(1)300B2미송유85": "783", "(1)300B3미송유12": "783", "(1)300B4미송유15": "783", "(1)300B5미송유18": "783", "(1)300B6미송무45": "959", "(1)300C1낙엽48": "852", "(1)300C2낙엽75": "852", "(1)300C3낙엽115": "852", "(1)300E낙엽18": "852", "(1)300OSB11내": "1565", "(1)300OSB8내": "1565", "(1)300내수1248수": "1018", "(1)300내수21236수": "833", "(1)300백색27": "1015", "(1)300오크27": "936", "(1)300준내수948": "1018", "(1)300태고1248N": "1638", "(1)300태고21236": "833", "(1)301MDF113고밀": "781", "(1)301MDF1245고밀": "781", "(1)301MDF136USB": "781", "(1)301MDF149USB": "781", "(1)301MDF1512USB": "781", "(1)301MDF1615USB": "781", "(1)301MDF1718USB": "781", "(1)301MDF1825UB": "781", "(1)301MDF1930UB": "781", "(1)301MDF206고밀": "1672", "(1)301MDF209고밀": "1672", "(1)301MDF2112고밀": "1672", "(1)301MDF2215고밀": "1672", "(1)301MDF2318고밀": "1672", "(1)302고무12탑": "960", "(1)302고무15탑": "960", "(1)302고무18탑": "960", "(1)302라디12탑": "1655", "(1)302라디15탑": "1655", "(1)302라디18탑": "1655", "(1)302라디24탑": "1655", "(1)302라디30탑": "1655", "(1)302레드12솔": "1801", "(1)302레드15솔": "1801", "(1)302레드18솔": "1801", "(1)302레드60각": "1795", "(1)302멀바1238": "1814", "(1)302멀바1538": "1814", "(1)302멀바1838": "1814", "(1)302멀바1848": "1739", "(1)302멀바계단30300": "927", "(1)302멀바계단38300": "1733", "(1)302미송계단38300": "1733", "(1)302미송대봉9090": "1650", "(1)302미송반달4070": "1284", "(1)302미송소봉4040": "1287", "(1)302미송식빵6070": "1289", "(1)302삼목12솔": "1811", "(1)302삼목15솔": "1811", "(1)302삼목18솔": "1811", "(1)302쏘노30300": "920", "(1)302아카15유": "1772", "(1)302아카18N무": "1776", "(1)302아카18유": "1772", "(1)302에쉬1848": "1645", "(1)302오동12솔": "1174", "(1)500다크브201328": "956", "(1)500도장피스838": "1380", "(1)500미들클립20": "1402", "(1)500스타트클립20": "1865", "(1)500아티론": "869", "(1)500클립피스820": "842", "(1)502백스페": "875", "(1)503스카이비바": "1231", "(1)503차음시트기본": "1701", "(1)503타공라메9": "1228", "(1)503타공원메9": "1227", "(1)60010그라스울기본": "979", "(1)60011아이소101호": "1593", "(1)60011이보드13도배": "1596", "(1)60012아이소20특": "1593", "(1)60012이보드23도배": "1597", "(1)60013아이소30특": "1593", "(1)60013이보드33도배": "1598", "(1)60014아이소50특": "848", "(1)60015아이소100특": "848", "(1)6001열반사10양": "885", "(1)6001열반사6양": "885", "(1)6002열반사10양": "885", "(1)6002열반사6양": "885", "(1)600LXPF301800N": "1546", "(1)600LXPF501800N": "1547", "(1)600LXPF901800N": "1548", "(1)600이보드13페": "1599", "(1)600이보드23페": "1600", "(1)600이보드33페": "1601", "(1)700168401걸레": "1828", "(1)700AL앵글도장": "1692", "(1)700A합7351935": "933", "(1)700B합7352035": "933", "(1)700C합8352035": "933", "(1)700D합9352035": "933", "(1)700E합8002000무": "1563", "(1)700F합8002000유": "1563", "(1)700G합8002100무": "1563", "(1)700H합9002100무": "1589", "(1)700I합9002100유": "1589", "(1)700J합1102100다": "1618", "(1)700K합100800요": "1231", "(1)700L합110900요": "1231", "(1)700P마이너메지95": "1401", "(1)700메지도장95": "987", "(1)700영1162계단": "1398", "(1)700영116301걸레": "1825", "(1)700영116601걸레": "1829", "(1)700영11680020001": "1345", "(1)700영11680020002": "1345", "(1)700영11690021001": "1345", "(1)700영11690021002": "1345", "(1)700영116901걸레": "1830", "(1)700영116P마이너": "1832", "(1)700영116마이너": "1823", "(1)700영116문선": "1830", "(1)700영116시트": "1854", "(1)700영116엣지": "1830", "(1)700영116천정1": "1827", "(1)700영116천정2": "1398", "(1)700영116천정3": "1398", "(1)700영116코너중": "1398", "(1)700영116평100": "1827", "(1)700영116평120": "1827", "(1)700영116평160": "1826", "(1)700영116평200": "1827", "(1)700영116평250": "1827", "(1)700영116평30": "1824", "(1)700영116평300": "1824", "(1)700영116평40": "1822", "(1)700영116평60": "1826", "(1)700영116평80": "1827", "(1)700영116평문선": "1823", "(1)700영161시트": "1854", "(1)700영168301걸레": "1825", "(1)700영16890021002": "1350", "(1)700영168마이너": "1823", "(1)700영168엣지": "1823", "(1)700영168평30": "1824", "(1)700영168평40": "1822", "(1)700영168평60": "1826", "(1)700영169301걸레": "1825", "(1)700영169401걸레": "1828", "(1)700영16990021002": "1350", "(1)700영169마이너": "1823", "(1)700영169엣지": "1823", "(1)700영169평30": "1824", "(1)700영169평40": "1822", "(1)700영169평60": "1826", "(1)700영194301걸레": "1825", "(1)700영194401걸레": "1828", "(1)700영194마이너스": "1823", "(1)700영194평30": "1824", "(1)700영194평40": "1822", "(1)700영194평60": "1826", "(1)700영195301걸레": "1825", "(1)700영195401걸레": "1828", "(1)700영195엣지": "1823", "(1)700영2580020001": "1346", "(1)700영2580020002": "1346", "(1)700영2590021001": "1592", "(1)700영2590021002": "1592", "(1)700영25코너대": "1622", "(1)700영25코너소": "1238", "(1)700영2780020001": "1346", "(1)700영2780020002": "1346", "(1)700영2790021001": "1590", "(1)700영3480020002": "1347", "(1)700영402계단": "1336", "(1)700영403계단": "1238", "(1)700영4080020001": "1348", "(1)700영4080020002": "1348", "(1)700영4090021001": "1593", "(1)700영4090021002": "1593", "(1)700영40901걸레": "1830", "(1)700영40마이너": "1823", "(1)700영40문선": "1238", "(1)700영40엣지": "1238", "(1)700영40천정1": "1335", "(1)700영40천정2": "1336", "(1)700영40천정3": "1337", "(1)700영40코너30": "1824", "(1)700영40코너대": "1231", "(1)700영40코너소": "1822", "(1)700영40코너중": "1238", "(1)700영40평100": "1827", "(1)700영40평120": "1335", "(1)700영40평160": "1826", "(1)700영40평200": "1336", "(1)700영40평250": "1336", "(1)700영40평30": "1238", "(1)700영40평300": "1337", "(1)700영40평40": "1238", "(1)700영40평60": "1238", "(1)700영40평80": "1238", "(1)700영40필름M": "1854", "(1)700영5080020001": "979", "(1)700영5080020002": "979", "(1)700영5090021001": "1593", "(1)700영5090021002": "1593", "(1)700영50엣지": "1233", "(1)700영5380020001": "1827", "(1)700영5380020002": "1827", "(1)700영5390021001": "978", "(1)700영5390021002": "978", "(1)700영53시트": "1854", "(1)700영53엣지": "1237", "(1)700영PS170평40": "1822", "(1)700영P백2계단대": "1843", "(1)700영P백2계단소": "1843", "(1)700영더1167331935": "1341", "(1)700영더1167331960": "1341", "(1)700영더1167332060": "1341", "(1)700영더1168332035": "1342", "(1)700영더1168332060": "1342", "(1)700영더1688332060": "1342", "(1)700영더1698332060": "1342", "(1)700영더257331935": "1341", "(1)700영더258332035": "1342", "(1)700영더277331935": "1341", "(1)700영더278332060": "1342", "(1)700영더347331935": "1341", "(1)700영더348332035": "1342", "(1)700영더407331935": "1341", "(1)700영더408332035": "1342", "(1)700영더408332060": "1342", "(1)700영더537331935": "1341", "(1)700영더537331960": "1341", "(1)700영더538332035": "1342", "(1)700영더538332060": "1342", "(1)700영렉스31208": "1370", "(1)700영렉스31210": "1344", "(1)700영렉스31212": "1346", "(1)700영림P마이너": "1832", "(1)700예HP52130걸레": "1825", "(1)700예HP52140걸레": "1828", "(1)700예HP52230걸레": "1837", "(1)700예HP52240걸레": "1838", "(1)80011실리1투명": "964", "(1)80011이지경실": "912", "(1)80011일반경실": "1332", "(1)80011타카422J": "899", "(1)80012실리반투명": "861", "(1)80012이지경골": "912", "(1)80012일반경골": "1332", "(1)80013실리백색": "964", "(1)80013이지경블": "912", "(1)80013일반경블": "1332", "(1)80013총422": "902", "(1)80014영림이지실버": "912", "(1)80014영림일반실버": "1332", "(1)80014이지경백": "1536", "(1)80014피스톤422": "1810", "(1)800CAP44흑": "1665", "(1)800가위": "967", "(1)800고체연료": "1563", "(1)800골판지": "1864", "(1)800뎀핑레일실": "861", "(1)800레일2": "1210", "(1)800레일3": "1837", "(1)800로라미4": "1247", "(1)800마대80": "1400", "(1)800마대90": "1400", "(1)800마대PP": "1454", "(1)800매거양321": "1359", "(1)800매거양625": "1173", "(1)800매거양632": "1402", "(1)800매거양638": "1402", "(1)800매거외321": "1359", "(1)800매거외625": "1173", "(1)800매거외625코": "1359", "(1)800매거외632": "1402", "(1)800매거외638": "1402", "(1)800비닐대": "1703", "(1)800비닐소": "1593", "(1)800빗자루": "1604", "(1)800빠찌링기본": "1162", "(1)800빠찌링백색": "1425", "(1)800빠찌링스텐": "914", "(1)800사륜로라": "1210", "(1)800사포120": "1224", "(1)800사포220": "1110", "(1)800사포320": "1362", "(1)800사포A원형": "1166", "(1)800서랍레일300": "1289", "(1)800서랍레일350": "983", "(1)800서랍레일400": "1279", "(1)800서랍레일450": "1279", "(1)800서랍레일피스": "983", "(1)800석고본드": "1244", "(1)800스텐피스25": "914", "(1)800스텐피스32": "914", "(1)800스텐피스38": "914", "(1)800스텐피스50": "914", "(1)800스토퍼말굽": "1865", "(1)800스토퍼블랙": "1865", "(1)800스토퍼실버": "1865", "(1)800스톱바": "1400", "(1)800실1701GR": "1330", "(1)800실5000BK": "1860", "(1)800실5000GR": "1326", "(1)800실5000WT": "1861", "(1)800실5001BK": "1862", "(1)800실5001GR": "1327", "(1)800실5001WT": "1863", "(1)800실5100GR": "1328", "(1)800실5101GR": "1329", "(1)800실6401GR": "1331", "(1)800실리B1투명": "863", "(1)800실리B반투명": "863", "(1)800실리B백색": "863", "(1)800실리C백색": "864", "(1)800실리골드": "861", "(1)800실리밤색": "964", "(1)800실리아이보리": "861", "(1)800실리우드": "898", "(1)800실리체리": "964", "(1)800실리콘건": "861", "(1)800실리회색": "964", "(1)800실리흑색": "964", "(1)800실타615": "913", "(1)800실타618": "913", "(1)800실타625": "913", "(1)800실타630": "913", "(1)800쓰레받": "1239", "(1)800씽크경유15": "985", "(1)800씽크경유18": "985", "(1)800씽크경일15": "985", "(1)800씽크경일18": "985", "(1)800씽크경피스": "985", "(1)800아연피스25": "929", "(1)800아연피스32": "929", "(1)800아연피스38": "929", "(1)800아연피스50": "929", "(1)800아연피스65": "929", "(1)800아연피스75": "929", "(1)800아연피스90": "842", "(1)800액자레일2": "1425", "(1)800에어건": "902", "(1)800엘가이드": "1400", "(1)800오메가12": "1279", "(1)800오메가7": "1279", "(1)800오메가8": "1279", "(1)800오메가9": "1279", "(1)800오목손사각": "967", "(1)800오목손은": "967", "(1)800오목손타원": "967", "(1)800오일116투명": "1245", "(1)800오일135투명": "1683", "(1)800오일16도토리": "1245", "(1)800오일16밤색": "1245", "(1)800오일16월넛": "1245", "(1)800오일16코코넛": "1245", "(1)800오일16티크": "1245", "(1)800오일16흑단": "1245", "(1)800오일16흑색": "1245", "(1)800오일35다크오렌": "1245", "(1)800오일35도토리": "1417", "(1)800오일35레드와인": "1245", "(1)800오일35마호가니": "1414", "(1)800오일35밝은오크": "1245", "(1)800오일35밤색": "1245", "(1)800오일35살구색": "1245", "(1)800오일35연녹색": "1245", "(1)800오일35연밤색": "1245", "(1)800오일35월넛": "1245", "(1)800오일35자단": "1245", "(1)800오일35참나무": "825", "(1)800오일35체리": "861", "(1)800오일35코코넛": "1245", "(1)800오일35티크": "1245", "(1)800오일35화이트": "1499", "(1)800오일35황색": "1245", "(1)800오일35흑단": "1245", "(1)800오일35흑색": "1245", "(1)800윙스25": "988", "(1)800윙스252": "988", "(1)800윙스32": "988", "(1)800윙스38": "988", "(1)800윙스45": "988", "(1)800윙스55": "988", "(1)800유리다보": "967", "(1)800자유경3": "1855", "(1)800자유경4": "1855", "(1)800장갑1코팅R": "987", "(1)800장갑기능대": "987", "(1)800장갑기능소": "987", "(1)800장갑기능중": "987", "(1)800점검300": "1401", "(1)800점검400": "1401", "(1)800점검450": "1401", "(1)800점검600": "1401", "(1)800점검AL600": "1401", "(1)800점검PVC300": "1401", "(1)800점검PVC400": "1401", "(1)800점검PVC450": "1401", "(1)800점검PVC600": "1401", "(1)800접시13": "910", "(1)800접시25": "910", "(1)800접시32": "910", "(1)800접시38": "910", "(1)800접착205": "980", "(1)800접착777": "849", "(1)800접착G1원": "1242", "(1)800접착G2원": "1243", "(1)800접착G3원": "1244", "(1)800접착아이소": "848", "(1)800접착에폭4": "850", "(1)800접착에폭A10": "850", "(1)800접착프라1": "1244", "(1)800접착프라3": "1244", "(1)800줄자55국": "1851", "(1)800줄자55세": "1851", "(1)800줄자55타": "1842", "(1)800줄자75타": "842", "(1)800철기리30": "1703", "(1)800철기리32": "1683", "(1)800철기리33": "1683", "(1)800총1850A": "902", "(1)800총630R": "902", "(1)800총BN1664": "902", "(1)800총CT64": "902", "(1)800총F30": "902", "(1)800칼브럭625": "913", "(1)800칼브럭640": "1806", "(1)800칼브럭812": "1666", "(1)800칼브럭890": "1593", "(1)800캇타칼": "1642", "(1)800캇타칼고급": "1269", "(1)800캇타칼날": "1401", "(1)800콩피스816": "988", "(1)800타카1022J": "899", "(1)800타카1ST18": "1173", "(1)800타카1ST25": "1173", "(1)800타카1ST32": "1173", "(1)800타카1ST38": "1173", "(1)800타카1ST45": "1173", "(1)800타카1ST50": "1173", "(1)800타카1ST57": "1173", "(1)800타카1ST64": "1173", "(1)800타카416J": "899", "(1)800타카419J": "899", "(1)800타카DT50": "856", "(1)800타카DT64": "1180", "(1)800타카F15": "913", "(1)800타카F20": "1362", "(1)800타카F25": "1705", "(1)800타카F30": "1195", "(1)800타카F40": "1238", "(1)800타카F50": "1709", "(1)800타카FST15": "1173", "(1)800타카FST18": "1173", "(1)800타카FST25": "1173", "(1)800타카FST30": "1173", "(1)800타카JST18": "1704", "(1)800타카JST25": "1705", "(1)800타카JST32": "1706", "(1)800타카JST38": "1707", "(1)800타카JST45": "1708", "(1)800타카JST50": "1709", "(1)800타카JST64": "1710", "(1)800타카T50": "901", "(1)800타카T57": "1534", "(1)800타카T64": "1240", "(1)800테잎25은": "890", "(1)800테잎50은": "890", "(1)800테잎마스대": "1667", "(1)800테잎마스소": "1670", "(1)800테잎박스": "1865", "(1)800테잎청": "1865", "(1)800테잎커버2000": "1666", "(1)800테잎커버2700": "1666", "(1)800테잎커버900": "1666", "(1)800테잎플로": "838", "(1)800텐텐지": "1536", "(1)800톱날265대": "1614", "(1)800톱날300대": "1614", "(1)800톱날330대": "1612", "(1)800톱날A265타": "909", "(1)800톱날A300타": "1614", "(1)800톱날A330타": "1612", "(1)800톱대": "1856", "(1)800퍼티20": "842", "(1)800퍼티5": "1865", "(1)800평붓2": "908", "(1)800평붓3": "908", "(1)800평붓4": "908", "(1)800평붓5": "908", "(1)800플로3": "978", "(1)800피스다보": "967", "(1)800피스톤630": "913", "(1)800피스톤CT64": "1240", "(1)800피스톤F30": "1195", "(1)800하폼건월드1": "1819", "(1)800하폼건월드2": "1818", "(1)800하폼건월드3": "1821", "(1)800하폼건월드4": "1857", "(1)800하폼건월드5": "1858", "(1)800하폼건월드8": "857", "(1)800하폼건월드9": "1859", "(1)800하폼크리너": "859", "(1)800핫멜트1심": "1244", "(1)800핫멜트건": "845", "(1)800핫팩": "1243", "(1)800행가노출2": "1160", "(1)800행가레일2": "1400", "(1)800행가양댐30": "1353", "(1)800행가양댐50": "1846", "(1)800행가양댐80": "1846", "(1)800행가하부촉": "1400", "(1)800헤라대": "964", "(1)800헤라소": "964", "(1)800헤라중": "964", "(1)800호스10": "1414", "(1)800호스20": "1414", "(1)800호스30": "1414", "(1)800호차30": "1781", "(1)A100뉴송11317": "836", "(1)A100뉴송21727": "836", "(1)A100뉴송32727": "836" };
 
-    const rows = Object.entries(MAP_DATA).map(([cd, pno]) => [cd, pno]);
-    sh.getRange(2, 1, rows.length, 2).setValues(rows);
-    Logger.log('✅ [보조매핑] 시트에 ' + rows.length + '건 기록 완료.');
+    const rows = Object.entries(MAP_DATA)?.map(([cd, pno]) => [cd, pno]);
+    sh.getRange(2, 1, rows?.length, 2).setValues(rows);
+    Logger.log('✅ [보조매핑] 시트에 ' + rows?.length + '건 기록 완료.');
 }
