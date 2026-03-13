@@ -63,7 +63,7 @@ export default function Phase1CatalogView() {
     // [수정] Redis 스냅샷은 Record<string, GroupedProduct> → Object.values()로 배열 변환 후 필터
     const groups = useMemo((): GroupedProduct[] => {
         if (!data) return [];
-        const allGroups: GroupedProduct[] = Object.values(data);
+        const allGroups: GroupedProduct[] = Object.values(data.lastSnapshot ?? data);
         return allGroups.filter((group) => {
             if (selectedCategory && !group.categoryNo?.includes(selectedCategory)) return false;
             if (debouncedSearch && !group.parentName.toLowerCase().includes(debouncedSearch.toLowerCase())) return false;
