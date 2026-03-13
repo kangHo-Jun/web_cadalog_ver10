@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 초기 렌더링
     // 주요 품목(테이블)만 렌더링
-    renderFeaturedTable((allProducts?.filter(p => p.is_table_view)) ?? []);
+    renderFeaturedTable(allProducts.filter(p => p.is_table_view));
 
     // 전체 카탈로그(그리드)는 숨김 상태로 시작
     document.getElementById('catalogSection').style.display = 'none';
@@ -22,19 +22,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadProducts() {
     try {
         const response = await fetch('../../data/refined_catalog.json');
-        const products = (await response.json()) || [];
+        const products = await response.json();
 
-        // 데이터 가공 (안전하게 기본값 설정)
-        allProducts = (products?.map((p, index) => ({
+        // 데이터 가공
+        allProducts = products.map((p, index) => ({
             ...p,
             display_order: index + 1,
             category: p.category || '미분류'
-        })) ) ?? [];
+        }));
 
         filteredProducts = [...allProducts];
         populateCategoryFilter();
 
-        console.log(`✅ ${allProducts?.length}개 상품 로드 완료`);
+        console.log(`✅ ${allProducts.length}개 상품 로드 완료`);
     } catch (error) {
         console.error('❌ 상품 데이터 로드 실패:', error);
         alert('상품 데이터를 불러오는데 실패했습니다.');
@@ -43,15 +43,15 @@ async function loadProducts() {
 
 // 카테고리 필터 옵션 생성
 function populateCategoryFilter() {
-    const categories = [...new Set((allProducts?.map(p => p.category)) ?? [])]?.filter(c => c);
+    const categories = [...new Set(allProducts.map(p => p.category))].filter(c => c);
     const select = document.getElementById('categoryFilter');
 
     // 기존 옵션 초기화 (첫 번째 제외)
-    while (select.options?.length > 1) {
+    while (select.options.length > 1) {
         select.remove(1);
     }
 
-    categories?.forEach(cat => {
+    categories.forEach(cat => {
         const option = document.createElement('option');
         option.value = cat;
         option.textContent = cat;
@@ -87,15 +87,15 @@ function applyFilters() {
     }
 
     // 필터링 적용
-    filteredProducts = (allProducts?.filter(product => {
+    filteredProducts = allProducts.filter(product => {
         const matchesSearch = !searchTerm ||
-            product?.name?.toLowerCase().includes(searchTerm) ||
-            product?.code?.toLowerCase().includes(searchTerm);
+            product.name.toLowerCase().includes(searchTerm) ||
+            product.code.toLowerCase().includes(searchTerm);
 
         const matchesCategory = !category || product.category === category;
 
         return matchesSearch && matchesCategory;
-    })) ?? [];
+    });
 
     // 화면 전환: 주요 품목 숨김, 검색 결과 테이블 표시
     document.getElementById('featuredSection').style.display = 'none';
@@ -103,7 +103,7 @@ function applyFilters() {
 
     // 검색 결과 타이틀 업데이트
     const resultTitle = document.querySelector('#catalogSection h2');
-    resultTitle.textContent = `🔍 검색 결과 (${filteredProducts?.length ?? 0}개)`;
+    resultTitle.textContent = `🔍 검색 결과 (${filteredProducts.length}개)`;
 
     renderSearchResultTable(filteredProducts);
 }
@@ -127,19 +127,19 @@ function renderSearchResultTable(products) {
     const totalCount = document.getElementById('totalCount');
 
     tbody.innerHTML = '';
-    totalCount.textContent = products?.length ?? 0;
+    totalCount.textContent = products.length;
 
-    if ((products?.length ?? 0) === 0) {
+    if (products.length === 0) {
         noResults.style.display = 'block';
         return;
     }
 
     noResults.style.display = 'none';
 
-    (products?.forEach((product, index) => {
+    products.forEach((product, index) => {
         const row = createProductRow(product, index + 1);
         tbody.appendChild(row);
-    }) ) ?? [];
+    });
 }
 
 // 주요 품목 렌더링 (테이블)
@@ -147,10 +147,10 @@ function renderFeaturedTable(products) {
     const tbody = document.getElementById('featuredTableBody');
     tbody.innerHTML = '';
 
-    (products?.forEach((product, index) => {
+    products.forEach((product, index) => {
         const row = createProductRow(product, index + 1);
         tbody.appendChild(row);
-    }) ) ?? [];
+    });
 }
 
 // 전체 품목 렌더링 (그리드)
@@ -160,19 +160,19 @@ function renderCatalogGrid(products) {
     const totalCount = document.getElementById('totalCount');
 
     grid.innerHTML = '';
-    totalCount.textContent = products?.length ?? 0;
+    totalCount.textContent = products.length;
 
-    if ((products?.length ?? 0) === 0) {
+    if (products.length === 0) {
         noResults.style.display = 'block';
         return;
     }
 
     noResults.style.display = 'none';
 
-    (products?.forEach(product => {
+    products.forEach(product => {
         const card = createProductCard(product);
         grid.appendChild(card);
-    }) ) ?? [];
+    });
 }
 
 // HTML 헬퍼: 테이블 행 생성
@@ -261,14 +261,14 @@ function updateAllAddButtons(productNo) {
 
     // 테이블 내 버튼 찾기
     const tableButtons = document.querySelectorAll(`#featuredTableBody button[onclick="addToQuote(${productNo})"]`);
-    tableButtons?.forEach(btn => {
+    tableButtons.forEach(btn => {
         btn.className = `btn-add-quote ${isInQuote ? 'added' : ''}`;
         btn.textContent = isInQuote ? '✓' : '+';
     });
 
     // 그리드 내 버튼 찾기
     const gridButtons = document.querySelectorAll(`#productGrid button[onclick="addToQuote(${productNo})"]`);
-    gridButtons?.forEach(btn => {
+    gridButtons.forEach(btn => {
         btn.className = `btn-add-quote ${isInQuote ? 'added' : ''}`;
         btn.textContent = isInQuote ? '담기' : '견적 +';
     });
@@ -285,7 +285,7 @@ function updateQuotePanel() {
         return;
     }
 
-    quoteItems?.forEach((item, productNo) => {
+    quoteItems.forEach((item, productNo) => {
         const div = document.createElement('div');
         div.className = 'quote-item';
         div.innerHTML = `
@@ -324,7 +324,7 @@ function updateQuoteSummary() {
     const totalPrice = document.getElementById('quoteTotalPrice');
 
     let total = 0;
-    quoteItems?.forEach(item => {
+    quoteItems.forEach(item => {
         total += item.product.price * item.quantity;
     });
 
@@ -358,7 +358,7 @@ function downloadQuote() {
     let total = 0;
     let index = 1;
 
-    quoteItems?.forEach(item => {
+    quoteItems.forEach(item => {
         const subtotal = item.product.price * item.quantity;
         total += subtotal;
 
