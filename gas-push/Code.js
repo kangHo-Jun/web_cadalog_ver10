@@ -905,11 +905,11 @@ function ensureTokenRefreshIfNeeded_(ss, cfg) {
     const accessDt = parseDate(accessExp);
     const refreshDt = parseDate(refreshExp);
 
-    // refresh_token 만료 7일 전 경고
+    // refresh_token 만료 1일 전 경고 (목표 B)
     if (refreshDt) {
         const daysLeft = Math.ceil((refreshDt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysLeft === 7) {
-            notifyAdmin_(cfg, `Refresh token 만료 7일 전 경고: (${refreshExp})\n재인증 준비 필요`);
+        if (daysLeft === 1) {
+            notifyAdmin_(cfg, `🚨 Refresh token 만료 1일 전 경고: (${refreshExp})\n내일 만료됩니다. 즉시 재인증 준비 필요`);
         }
         if (daysLeft <= 0) {
             notifyAdmin_(cfg, `Refresh token 만료됨 (${refreshExp})\n재인증 필요: OAuth 재인증 후 새 토큰을 [설정] 시트에 반영하세요.`);

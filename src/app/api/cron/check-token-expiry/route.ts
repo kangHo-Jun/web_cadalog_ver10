@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from 'redis';
 import nodemailer from 'nodemailer';
+import { refreshAccessToken } from '@/lib/cafe24-auth';
 
 const TOKEN_KEY = 'cafe24_tokens';
-const ALERT_DAYS = 2; // days before expiry to send alert
+const ALERT_DAYS = 1; // 하루 전 알림 (목표 B)
 const RECIPIENT_EMAIL = 'zartkang@gmail.com';
 
 const REAUTH_URL =
@@ -84,17 +85,43 @@ export async function GET() {
         }
 
         const tokens = JSON.parse(data);
+        const now = Date.now();
+        const result: Record<string, unknown> = {};
+
+        // ── 목표 A: access_token 만료 30분 전이면 자동 갱신 ─────────
+        const accessExpiresAt = tokens.expires_at ? Number(tokens.expires_at) : null;
+        if (accessExpiresAt) {
+            const msLeft = accessExpiresAt - now;
+            const minLeft = Math.floor(msLeft / (1000 * 60));
+            console.log(`🕐 Access Token expires in ${minLeft} minutes`);
+
+            if (msLeft <= 30 * 60 * 1000) {
+                console.log('🔄 Access token expiring soon — refreshing...');
+                try {
+                    await refreshAccessToken();
+                    console.log('✅ Access token auto-refreshed');
+                    result.access_token_refreshed = true;
+                } catch (refreshErr: any) {
+                    console.error('❌ Auto-refresh failed:', refreshErr.message);
+                    await sendExpiryEmail(-1, new Date(accessExpiresAt));
+                    result.access_token_refresh_failed = refreshErr.message;
+                }
+            } else {
+                result.access_token_expires_in_min = minLeft;
+            }
+        }
+
+        // ── 목표 B: refresh_token 만료 1일 전 알림 ──────────────────
         const refreshExpiresAt = tokens.refresh_token_expires_at
             ? new Date(tokens.refresh_token_expires_at)
             : null;
 
         if (!refreshExpiresAt) {
-            return NextResponse.json({ status: 'no_expiry_info', message: 'No expiry info stored' });
+            return NextResponse.json({ ...result, status: 'no_refresh_expiry_info' });
         }
 
-        const now = Date.now();
-        const msLeft = refreshExpiresAt.getTime() - now;
-        const daysLeft = Math.floor(msLeft / (1000 * 60 * 60 * 24));
+        const msRefreshLeft = refreshExpiresAt.getTime() - now;
+        const daysLeft = Math.floor(msRefreshLeft / (1000 * 60 * 60 * 24));
 
         console.log(`🕐 Refresh Token expires at: ${refreshExpiresAt.toISOString()} (${daysLeft} days left)`);
 
@@ -102,13 +129,15 @@ export async function GET() {
             await sendExpiryEmail(daysLeft, refreshExpiresAt);
             console.log(`📧 Alert email sent to ${RECIPIENT_EMAIL} (${daysLeft} days left)`);
             return NextResponse.json({
-                status: 'alert_sent',
+                ...result,
+                status: 'refresh_alert_sent',
                 daysLeft,
                 expiresAt: refreshExpiresAt.toISOString(),
             });
         }
 
         return NextResponse.json({
+            ...result,
             status: 'ok',
             daysLeft,
             expiresAt: refreshExpiresAt.toISOString(),
