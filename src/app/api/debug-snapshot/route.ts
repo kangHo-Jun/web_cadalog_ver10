@@ -8,10 +8,12 @@ export async function GET() {
     await client.connect();
     const data = await client.get('catalog:snapshot:v1');
     await client.quit();
+    const snapshot = data ? JSON.parse(data) : {};
     return NextResponse.json({
       status: 'OK',
       responseTime: Date.now() - start + 'ms',
-      snapshotSize: data?.length || 0
+      snapshotSize: Object.keys(snapshot).length,
+      lastSnapshot: snapshot
     });
   } catch (error: any) {
     return NextResponse.json({
