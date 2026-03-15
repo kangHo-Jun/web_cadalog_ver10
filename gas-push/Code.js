@@ -275,16 +275,27 @@ function syncPrices() {
 
 function createTrigger() {
     const triggers = ScriptApp.getProjectTriggers();
+    let hasCheckTokenExpiry = false;
+
     for (const t of triggers) {
         const fn = t.getHandlerFunction();
-        if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts') {
+        if (fn === 'checkTokenExpiry') {
+            hasCheckTokenExpiry = true;
+        } else if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts') {
             ScriptApp.deleteTrigger(t);
         }
     }
+
     ScriptApp.newTrigger('buildCafe24Cache').timeBased().everyDays(1).create();
     ScriptApp.newTrigger('checkNewProducts').timeBased().everyHours(2).create();
     ScriptApp.newTrigger('syncPrices').timeBased().everyHours(1).create();
-    Logger.log('✅ buildCafe24Cache 매일 1회, checkNewProducts 2시간마다, syncPrices 매 60분 자동 트리거가 생성되었습니다.');
+
+    if (!hasCheckTokenExpiry) {
+        ScriptApp.newTrigger('checkTokenExpiry').timeBased().everyHours(1).create();
+        Logger.log('✅ checkTokenExpiry 트리거가 신규 등록되었습니다. (1시간 간격)');
+    }
+
+    Logger.log('✅ 기타 기본 트리거(buildCafe24Cache, checkNewProducts, syncPrices) 갱신 완료.');
 }
 
 
