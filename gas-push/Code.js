@@ -972,6 +972,23 @@ function ensureTokenExpiryKeys() {
     Logger.log('[ensureTokenExpiryKeys] TOKEN_EXPIRES_AT/REFRESH_EXPIRES_AT 추가 완료');
 }
 
+// Vercel cron 토큰 만료 체크 호출
+function checkTokenExpiry() {
+    try {
+        const url = 'https://web-cadalog-ver10.vercel.app/api/cron/check-token-expiry';
+        const response = UrlFetchApp.fetch(url, { method: 'GET', muteHttpExceptions: true });
+        const data = JSON.parse(response.getContentText());
+        Logger.log('✅ checkTokenExpiry 결과: ' + JSON.stringify(data));
+
+        if (data.status !== 'ok') {
+            notifyAdmin_(G_CFG, '🚨 토큰 갱신 실패: ' + JSON.stringify(data));
+        }
+    } catch (e) {
+        Logger.log('❌ checkTokenExpiry 오류: ' + e.message);
+        notifyAdmin_(G_CFG, '🚨 checkTokenExpiry 오류: ' + e.message);
+    }
+}
+
 // 특정 품목의 가격 비교 로그 출력 (매핑테이블)
 function printPriceCheck() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
