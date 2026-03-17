@@ -127,12 +127,13 @@ export async function saveTokens(tokens: Tokens): Promise<void> {
     }
 
     // 2. Vercel 환경변수 동시 업데이트 (목표 C — Redis 유실 대비 fallback 최신화)
-    try {
-        await updateVercelEnv('CAFE24_ACCESS_TOKEN', tokens.access_token);
-        await updateVercelEnv('CAFE24_REFRESH_TOKEN', tokens.refresh_token);
-    } catch (error) {
-        console.error('❌ Vercel env update error:', error);
-    }
+    // 백그라운드 실행 (await 제거 - 타임아웃 방지)
+    updateVercelEnv('CAFE24_ACCESS_TOKEN', tokens.access_token).catch(e =>
+        console.error('Vercel env update failed:', e.message)
+    );
+    updateVercelEnv('CAFE24_REFRESH_TOKEN', tokens.refresh_token).catch(e =>
+        console.error('Vercel env update failed:', e.message)
+    );
 }
 
 // Redis에만 저장 (getTokens fallback 복구용)
