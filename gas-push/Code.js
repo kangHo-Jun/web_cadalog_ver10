@@ -281,7 +281,7 @@ function createTrigger() {
         const fn = t.getHandlerFunction();
         if (fn === 'checkTokenExpiry') {
             hasCheckTokenExpiry = true;
-        } else if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts') {
+        } else if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts' || fn === 'refreshCafe24Token') {
             ScriptApp.deleteTrigger(t);
         }
     }
@@ -294,6 +294,9 @@ function createTrigger() {
         ScriptApp.newTrigger('checkTokenExpiry').timeBased().everyHours(1).create();
         Logger.log('✅ checkTokenExpiry 트리거가 신규 등록되었습니다. (1시간 간격)');
     }
+
+    ScriptApp.newTrigger('refreshCafe24Token').timeBased().everyHours(1).create();
+    Logger.log('✅ refreshCafe24Token 트리거가 등록되었습니다. (1시간 간격, 1시간45분 보호)');
 
     Logger.log('✅ 기타 기본 트리거(buildCafe24Cache, checkNewProducts, syncPrices) 갱신 완료.');
 }
@@ -468,21 +471,126 @@ function _rawPut(url, apiVersion, token, payload) {
 
 /** Refresh Token → 새 Access Token */
 function refreshCafe24Token(cfg) {
-    const creds = Utilities.base64Encode(`${cfg[KEY.C24_CLIENT_ID]}:${cfg[KEY.C24_CLIENT_SECRET]}`);
-    const res = UrlFetchApp.fetch(
-        `https://${cfg[KEY.C24_MALL_ID]}.cafe24api.com/api/v2/oauth/token`,
-        {
-            method: 'POST',
-            headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            payload: `grant_type=refresh_token&refresh_token=${cfg[KEY.C24_REFRESH_TOKEN]}`,
-            muteHttpExceptions: true,
+    let localCfg = null;
+    try {
+        const ss = getSpreadsheet();
+        localCfg = cfg || readConfig(ss);
+
+        // 스케줄 실행 시 1시간 45분 간격 유지
+        if (!cfg) {
+            const props = PropertiesService.getScriptProperties();
+            const last = Number(props.getProperty('C24_REFRESH_LAST_RUN') || '0');
+            const now = Date.now();
+            const intervalMs = 105 * 60 * 1000; // 1시간 45분
+            if (now - last < intervalMs) {
+                Logger.log('[refreshCafe24Token] 최근 실행됨 — 스킵');
+                return;
+            }
+            props.setProperty('C24_REFRESH_LAST_RUN', String(now));
         }
+
+        const mallId = localCfg[KEY.C24_MALL_ID];
+        const clientId = localCfg[KEY.C24_CLIENT_ID];
+        const clientSecret = localCfg[KEY.C24_CLIENT_SECRET];
+        const refreshToken = localCfg[KEY.C24_REFRESH_TOKEN];
+
+        if (!mallId || !clientId || !clientSecret || !refreshToken) {
+            const msg = '❌ 필수 설정값 누락';
+            Logger.log(msg);
+            throw new Error(msg);
+        }
+
+        const credentials = Utilities.base64Encode(clientId + ':' + clientSecret);
+
+        const response = UrlFetchApp.fetch(
+            'https://' + mallId + '.cafe24api.com/api/v2/oauth/token',
+            {
+                method: 'post',
+                headers: {
+                    'Authorization': 'Basic ' + credentials,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                payload: 'grant_type=refresh_token&refresh_token=' + refreshToken,
+                muteHttpExceptions: true
+            }
+        );
+
+        const data = JSON.parse(response.getContentText());
+
+        if (data.access_token) {
+            // 1. 구글시트 [설정] 탭 업데이트
+            setConfig(ss, KEY.C24_ACCESS_TOKEN, data.access_token);
+            if (data.refresh_token) {
+                setConfig(ss, KEY.C24_REFRESH_TOKEN, data.refresh_token);
+            }
+
+            // 2. Vercel 환경변수 업데이트
+            const vercelToken = localCfg.VERCEL_TOKEN || localCfg['VERCEL_TOKEN'];
+            const vercelProjectId = localCfg.VERCEL_PROJECT_ID || localCfg['VERCEL_PROJECT_ID'];
+            updateVercelEnv_('CAFE24_ACCESS_TOKEN', data.access_token, vercelToken, vercelProjectId);
+            if (data.refresh_token) {
+                updateVercelEnv_('CAFE24_REFRESH_TOKEN', data.refresh_token, vercelToken, vercelProjectId);
+            }
+
+            // 3. Redis 업데이트
+            const accessExp = data.expires_at
+                ? new Date(data.expires_at).getTime()
+                : Date.now() + 2 * 60 * 60 * 1000;
+            const refreshExp = data.refresh_token_expires_at
+                ? new Date(data.refresh_token_expires_at).getTime()
+                : Date.now() + 14 * 24 * 60 * 60 * 1000;
+
+            const redisPayload = JSON.stringify({
+                access_token: data.access_token,
+                refresh_token: data.refresh_token || refreshToken,
+                expires_at: accessExp,
+                refresh_token_expires_at: refreshExp
+            });
+
+            UrlFetchApp.fetch('https://web-cadalog-ver10.vercel.app/api/token-update', {
+                method: 'post',
+                contentType: 'application/json',
+                payload: redisPayload,
+                muteHttpExceptions: true
+            });
+
+            Logger.log('✅ 토큰 갱신 완료: ' + data.access_token);
+            return data;
+        }
+
+        const failMsg = '❌ 토큰 갱신 실패: ' + JSON.stringify(data);
+        Logger.log(failMsg);
+        notifyAdmin_(localCfg, '🚨 Cafe24 토큰 자동 갱신 실패\n' + JSON.stringify(data));
+        throw new Error(failMsg);
+    } catch (e) {
+        Logger.log('❌ refreshCafe24Token 오류: ' + e.message);
+        const cfgForNotify = cfg || localCfg || {};
+        notifyAdmin_(cfgForNotify, '🚨 refreshCafe24Token 오류: ' + e.message);
+        throw e;
+    }
+}
+
+function updateVercelEnv_(key, value, token, projectId) {
+    if (!token || !projectId) return;
+
+    const listRes = UrlFetchApp.fetch(
+        'https://api.vercel.com/v9/projects/' + projectId + '/env?decrypt=true',
+        { headers: { Authorization: 'Bearer ' + token } }
     );
-    const body = res.getContentText();
-    Logger.log('[refreshCafe24Token] 응답: ' + body.substring(0, 150));
-    const json = JSON.parse(body);
-    if (!json.access_token) throw new Error('Token refresh 실패: ' + body);
-    return json;
+    const listData = JSON.parse(listRes.getContentText());
+    const existing = (listData.envs || []).find(e => e.key === key);
+
+    if (existing) {
+        UrlFetchApp.fetch(
+            'https://api.vercel.com/v9/projects/' + projectId + '/env/' + existing.id,
+            {
+                method: 'patch',
+                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                payload: JSON.stringify({ value: value, target: ['production'] })
+            }
+        );
+    }
+    Logger.log('✅ Vercel env updated: ' + key);
 }
 
 // 전체 상품 목록 조회는 사용하지 않음 (타겟 동기화만 수행)
