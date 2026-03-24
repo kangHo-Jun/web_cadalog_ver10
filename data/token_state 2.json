@@ -1,0 +1,16 @@
+{
+  "access_token": "3KMOzmKwE1rg4MbqATSvvD",
+  "expires_at": "2026-03-11T12:39:27.000",
+  "refresh_token": "hV7UR5oPFFQtTFljepuAsD",
+  "refresh_token_expires_at": "2026-03-25T10:39:27.000",
+  "client_id": "5TbJGxFqFBOtlYEXoWL47D",
+  "mall_id": "daesan3833",
+  "user_id": "daesan3833",
+  "scopes": [
+    "mall.read_product",
+    "mall.write_product"
+  ],
+  "issued_at": "2026-03-11T10:39:27.000",
+  "shop_no": "1",
+  "token_type": "Bearer"
+}

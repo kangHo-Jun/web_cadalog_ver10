@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(clasp push:*)"
+      "Bash(clasp push:*)",
+      "Bash(find '/Users/zart/Library/Mobile Documents/com~apple~CloudDocs/프로젝트/Antigravity_Project/ERP/src/components/phase1' -name *.tsx)",
+      "Read(//Users/zart/.claude/projects/-Users-zart-Library-Mobile-Documents-com-apple-CloudDocs-프로젝트-Antigravity_Project-ERP/**)",
+      "Bash(ls \"/Users/zart/Library/Mobile Documents/com~apple~CloudDocs/프로젝트/Antigravity_Project/ERP/docs/토큰\"*)",
+      "Bash(find '/Users/zart/Library/Mobile Documents/com~apple~CloudDocs/프로젝트/Antigravity_Project/ERP' -name .env* -not -path */node_modules/*)"
     ]
   }
 }

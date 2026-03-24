@@ -42,6 +42,7 @@ const KEY = {
     ADMIN_EMAIL: 'ADMIN_EMAIL',
     TOKEN_EXPIRES_AT: 'TOKEN_EXPIRES_AT',
     REFRESH_EXPIRES_AT: 'REFRESH_EXPIRES_AT',
+    MONITORING_SHEET_ID: 'MONITORING_SHEET_ID',
 };
 
 const SH = { CONFIG: '설정', MAPPING: '매핑테이블', LOG: '실행로그' };
@@ -56,6 +57,7 @@ const TIME_LIMIT_MS = 320000; // 5분 20초 (GAS 6분 제한 대비 여유)
 let G_TOKEN = '';
 let G_CFG = null;
 let G_SS = null;
+let G_MON_SS = null;   // 모니터링 시트 (토큰 저장소)
 let G_CONSEC_FAIL = 0;
 
 
@@ -75,6 +77,7 @@ function syncPrices() {
         // ── Step 1. 설정 로드 ─────────────────────────────────
         G_SS = getSpreadsheet();
         G_CFG = readConfig(G_SS);
+        initMonitoringSheet_(G_CFG);   // 모니터링 시트에서 토큰 오버레이
         G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
         Logger.log(`Step1: 설정 로드 완료 | DRY_RUN=${G_CFG[KEY.DRY_RUN]}`);
         logs.push(`[${now()}] Step1: 설정 로드 완료`);
@@ -88,7 +91,7 @@ function syncPrices() {
 
         // ── Step 2.1 토큰 자동 갱신/사전 알림 ─────────────────
         try {
-            const refreshed = ensureTokenRefreshIfNeeded_(G_SS, G_CFG);
+            const refreshed = ensureTokenRefreshIfNeeded_(G_CFG);
             if (refreshed) {
                 G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
                 logs.push(`[${now()}] Step2.1: 토큰 자동 갱신 완료`);
@@ -275,30 +278,16 @@ function syncPrices() {
 
 function createTrigger() {
     const triggers = ScriptApp.getProjectTriggers();
-    let hasCheckTokenExpiry = false;
-
     for (const t of triggers) {
         const fn = t.getHandlerFunction();
-        if (fn === 'checkTokenExpiry') {
-            hasCheckTokenExpiry = true;
-        } else if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts' || fn === 'refreshCafe24Token') {
+        if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts') {
             ScriptApp.deleteTrigger(t);
         }
     }
-
     ScriptApp.newTrigger('buildCafe24Cache').timeBased().everyDays(1).create();
     ScriptApp.newTrigger('checkNewProducts').timeBased().everyHours(2).create();
     ScriptApp.newTrigger('syncPrices').timeBased().everyHours(1).create();
-
-    if (!hasCheckTokenExpiry) {
-        ScriptApp.newTrigger('checkTokenExpiry').timeBased().everyHours(1).create();
-        Logger.log('✅ checkTokenExpiry 트리거가 신규 등록되었습니다. (1시간 간격)');
-    }
-
-    ScriptApp.newTrigger('refreshCafe24Token').timeBased().everyHours(1).create();
-    Logger.log('✅ refreshCafe24Token 트리거가 등록되었습니다. (1시간 간격, 1시간45분 보호)');
-
-    Logger.log('✅ 기타 기본 트리거(buildCafe24Cache, checkNewProducts, syncPrices) 갱신 완료.');
+    Logger.log('✅ buildCafe24Cache 매일 1회, checkNewProducts 2시간마다, syncPrices 매 60분 자동 트리거가 생성되었습니다.');
 }
 
 
@@ -307,15 +296,42 @@ function createTrigger() {
 // ■ 카페24 API
 // ════════════════════════════════════════════════════════
 
-/** 401 감지 시 토큰 재발급 후 G_TOKEN 갱신 */
+/** 401 감지 시 토큰 재발급 후 G_TOKEN 갱신
+ *  1차: 모니터링 시트 재읽기 (monitoring-gas가 이미 갱신했을 수 있음)
+ *  2차: 직접 refresh_token으로 갱신 (1차 실패 시 폴백)
+ */
 function tryRefreshAndRetry_() {
     Logger.log('[TokenRefresh] 401 감지. 토큰 재발급 시도...');
+
+    // 1차: 모니터링 시트에서 최신 토큰 재읽기
+    if (G_MON_SS) {
+        try {
+            const freshCfg = readConfig(G_MON_SS);
+            const freshToken = freshCfg[KEY.C24_ACCESS_TOKEN];
+            Logger.log('[TokenRefresh] 모니터링 시트 재읽기 ACCESS_TOKEN 앞10자: ' + (freshToken || '(없음)').substring(0, 10));
+            if (freshToken && freshToken !== G_TOKEN) {
+                G_TOKEN = freshToken;
+                G_CFG[KEY.C24_ACCESS_TOKEN] = freshToken;
+                if (freshCfg[KEY.C24_REFRESH_TOKEN]) G_CFG[KEY.C24_REFRESH_TOKEN] = freshCfg[KEY.C24_REFRESH_TOKEN];
+                Logger.log('[TokenRefresh] 모니터링 시트 최신 토큰으로 교체 완료');
+                return;
+            }
+            Logger.log('[TokenRefresh] 모니터링 시트 토큰 동일 → refresh_token으로 갱신 진행');
+        } catch (e) {
+            Logger.log('[TokenRefresh] 모니터링 시트 재읽기 실패: ' + e.message);
+        }
+    }
+
+    // 2차 폴백: refresh_token으로 직접 갱신
+    Logger.log('[TokenRefresh] 사용할 REFRESH_TOKEN 앞10자: ' + (G_CFG[KEY.C24_REFRESH_TOKEN] || '(없음)').substring(0, 10));
     const refreshed = refreshCafe24Token(G_CFG);
     G_TOKEN = refreshed.access_token;
     G_CFG[KEY.C24_ACCESS_TOKEN] = G_TOKEN;
     if (refreshed.refresh_token) G_CFG[KEY.C24_REFRESH_TOKEN] = refreshed.refresh_token;
-    setConfig(G_SS, KEY.C24_ACCESS_TOKEN, G_TOKEN);
-    if (refreshed.refresh_token) setConfig(G_SS, KEY.C24_REFRESH_TOKEN, refreshed.refresh_token);
+    setTokenConfig_(KEY.C24_ACCESS_TOKEN, G_TOKEN);
+    if (refreshed.refresh_token) setTokenConfig_(KEY.C24_REFRESH_TOKEN, refreshed.refresh_token);
+    if (refreshed.expires_at) { G_CFG[KEY.TOKEN_EXPIRES_AT] = refreshed.expires_at; setTokenConfig_(KEY.TOKEN_EXPIRES_AT, refreshed.expires_at); }
+    if (refreshed.refresh_token_expires_at) { G_CFG[KEY.REFRESH_EXPIRES_AT] = refreshed.refresh_token_expires_at; setTokenConfig_(KEY.REFRESH_EXPIRES_AT, refreshed.refresh_token_expires_at); }
     Logger.log('[TokenRefresh] 재발급 성공. 새 토큰 앞 15자: ' + G_TOKEN.substring(0, 15));
 }
 
@@ -471,126 +487,22 @@ function _rawPut(url, apiVersion, token, payload) {
 
 /** Refresh Token → 새 Access Token */
 function refreshCafe24Token(cfg) {
-    let localCfg = null;
-    try {
-        const ss = getSpreadsheet();
-        localCfg = cfg || readConfig(ss);
-
-        // 스케줄 실행 시 1시간 45분 간격 유지
-        if (!cfg) {
-            const props = PropertiesService.getScriptProperties();
-            const last = Number(props.getProperty('C24_REFRESH_LAST_RUN') || '0');
-            const now = Date.now();
-            const intervalMs = 105 * 60 * 1000; // 1시간 45분
-            if (now - last < intervalMs) {
-                Logger.log('[refreshCafe24Token] 최근 실행됨 — 스킵');
-                return;
-            }
-            props.setProperty('C24_REFRESH_LAST_RUN', String(now));
+    Logger.log('[refreshCafe24Token] 실제사용 CLIENT_ID: ' + (cfg[KEY.C24_CLIENT_ID] || '(없음)'));
+    const creds = Utilities.base64Encode(`${cfg[KEY.C24_CLIENT_ID]}:${cfg[KEY.C24_CLIENT_SECRET]}`);
+    const res = UrlFetchApp.fetch(
+        `https://${cfg[KEY.C24_MALL_ID]}.cafe24api.com/api/v2/oauth/token`,
+        {
+            method: 'POST',
+            headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            payload: `grant_type=refresh_token&refresh_token=${cfg[KEY.C24_REFRESH_TOKEN]}`,
+            muteHttpExceptions: true,
         }
-
-        const mallId = localCfg[KEY.C24_MALL_ID];
-        const clientId = localCfg[KEY.C24_CLIENT_ID];
-        const clientSecret = localCfg[KEY.C24_CLIENT_SECRET];
-        const refreshToken = localCfg[KEY.C24_REFRESH_TOKEN];
-
-        if (!mallId || !clientId || !clientSecret || !refreshToken) {
-            const msg = '❌ 필수 설정값 누락';
-            Logger.log(msg);
-            throw new Error(msg);
-        }
-
-        const credentials = Utilities.base64Encode(clientId + ':' + clientSecret);
-
-        const response = UrlFetchApp.fetch(
-            'https://' + mallId + '.cafe24api.com/api/v2/oauth/token',
-            {
-                method: 'post',
-                headers: {
-                    'Authorization': 'Basic ' + credentials,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                payload: 'grant_type=refresh_token&refresh_token=' + refreshToken,
-                muteHttpExceptions: true
-            }
-        );
-
-        const data = JSON.parse(response.getContentText());
-
-        if (data.access_token) {
-            // 1. 구글시트 [설정] 탭 업데이트
-            setConfig(ss, KEY.C24_ACCESS_TOKEN, data.access_token);
-            if (data.refresh_token) {
-                setConfig(ss, KEY.C24_REFRESH_TOKEN, data.refresh_token);
-            }
-
-            // 2. Vercel 환경변수 업데이트
-            const vercelToken = localCfg.VERCEL_TOKEN || localCfg['VERCEL_TOKEN'];
-            const vercelProjectId = localCfg.VERCEL_PROJECT_ID || localCfg['VERCEL_PROJECT_ID'];
-            updateVercelEnv_('CAFE24_ACCESS_TOKEN', data.access_token, vercelToken, vercelProjectId);
-            if (data.refresh_token) {
-                updateVercelEnv_('CAFE24_REFRESH_TOKEN', data.refresh_token, vercelToken, vercelProjectId);
-            }
-
-            // 3. Redis 업데이트
-            const accessExp = data.expires_at
-                ? new Date(data.expires_at).getTime()
-                : Date.now() + 2 * 60 * 60 * 1000;
-            const refreshExp = data.refresh_token_expires_at
-                ? new Date(data.refresh_token_expires_at).getTime()
-                : Date.now() + 14 * 24 * 60 * 60 * 1000;
-
-            const redisPayload = JSON.stringify({
-                access_token: data.access_token,
-                refresh_token: data.refresh_token || refreshToken,
-                expires_at: accessExp,
-                refresh_token_expires_at: refreshExp
-            });
-
-            UrlFetchApp.fetch('https://web-cadalog-ver10.vercel.app/api/token-update', {
-                method: 'post',
-                contentType: 'application/json',
-                payload: redisPayload,
-                muteHttpExceptions: true
-            });
-
-            Logger.log('✅ 토큰 갱신 완료: ' + data.access_token);
-            return data;
-        }
-
-        const failMsg = '❌ 토큰 갱신 실패: ' + JSON.stringify(data);
-        Logger.log(failMsg);
-        notifyAdmin_(localCfg, '🚨 Cafe24 토큰 자동 갱신 실패\n' + JSON.stringify(data));
-        throw new Error(failMsg);
-    } catch (e) {
-        Logger.log('❌ refreshCafe24Token 오류: ' + e.message);
-        const cfgForNotify = cfg || localCfg || {};
-        notifyAdmin_(cfgForNotify, '🚨 refreshCafe24Token 오류: ' + e.message);
-        throw e;
-    }
-}
-
-function updateVercelEnv_(key, value, token, projectId) {
-    if (!token || !projectId) return;
-
-    const listRes = UrlFetchApp.fetch(
-        'https://api.vercel.com/v9/projects/' + projectId + '/env?decrypt=true',
-        { headers: { Authorization: 'Bearer ' + token } }
     );
-    const listData = JSON.parse(listRes.getContentText());
-    const existing = (listData.envs || []).find(e => e.key === key);
-
-    if (existing) {
-        UrlFetchApp.fetch(
-            'https://api.vercel.com/v9/projects/' + projectId + '/env/' + existing.id,
-            {
-                method: 'patch',
-                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-                payload: JSON.stringify({ value: value, target: ['production'] })
-            }
-        );
-    }
-    Logger.log('✅ Vercel env updated: ' + key);
+    const body = res.getContentText();
+    Logger.log('[refreshCafe24Token] 응답: ' + body.substring(0, 150));
+    const json = JSON.parse(body);
+    if (!json.access_token) throw new Error('Token refresh 실패: ' + body);
+    return json;
 }
 
 // 전체 상품 목록 조회는 사용하지 않음 (타겟 동기화만 수행)
@@ -685,11 +597,12 @@ function checkNewProducts() {
     const cfg = readConfig(ss);
     G_CFG = cfg;
     G_SS = ss;
-    G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || '';
+    initMonitoringSheet_(G_CFG);
+    G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
 
     // 토큰 자동 갱신 시도
     try {
-        const refreshed = ensureTokenRefreshIfNeeded_(ss, cfg);
+        const refreshed = ensureTokenRefreshIfNeeded_(cfg);
         if (refreshed) G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
     } catch (e) {
         Logger.log('[checkNewProducts] 토큰 갱신 실패: ' + e.message);
@@ -742,11 +655,12 @@ function buildCafe24Cache() {
     const cfg = readConfig(ss);
     G_CFG = cfg;
     G_SS = ss;
-    G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || '';
+    initMonitoringSheet_(G_CFG);
+    G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
 
     // 토큰 자동 갱신 시도 (2시간 이내 만료)
     try {
-        const refreshed = ensureTokenRefreshIfNeeded_(ss, cfg);
+        const refreshed = ensureTokenRefreshIfNeeded_(cfg);
         if (refreshed) {
             G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
             Logger.log('[buildCafe24Cache] 토큰 자동 갱신 성공');
@@ -895,6 +809,41 @@ function getSpreadsheet() {
     catch (e) { return SpreadsheetApp.openById(SPREADSHEET_ID); }
 }
 
+/**
+ * 모니터링 시트 초기화.
+ * 메인 [설정]의 MONITORING_SHEET_ID로 모니터링 시트를 열고,
+ * 해당 시트 [설정]의 토큰 4개 키를 cfg에 오버레이한다.
+ */
+function initMonitoringSheet_(cfg) {
+    const monId = cfg[KEY.MONITORING_SHEET_ID];
+    if (!monId) return;
+    try {
+        G_MON_SS = SpreadsheetApp.openById(monId);
+        const monCfg = readConfig(G_MON_SS);
+        [KEY.C24_ACCESS_TOKEN, KEY.C24_REFRESH_TOKEN, KEY.TOKEN_EXPIRES_AT, KEY.REFRESH_EXPIRES_AT]
+            .forEach(k => { if (monCfg[k]) cfg[k] = monCfg[k]; });
+        Logger.log('[initMonitoringSheet] 모니터링 시트 토큰 로드 완료');
+        Logger.log('[initMonitoringSheet] ACCESS_TOKEN  앞10자: ' + (cfg[KEY.C24_ACCESS_TOKEN]  || '(없음)').substring(0, 10));
+        Logger.log('[initMonitoringSheet] REFRESH_TOKEN 앞10자: ' + (cfg[KEY.C24_REFRESH_TOKEN] || '(없음)').substring(0, 10));
+        const mainClientId = (G_SS ? readConfig(G_SS)[KEY.C24_CLIENT_ID] : '') || '(없음)';
+        const monClientId  = monCfg[KEY.C24_CLIENT_ID] || '(없음)';
+        Logger.log('[initMonitoringSheet] CLIENT_ID 매핑테이블: ' + mainClientId);
+        Logger.log('[initMonitoringSheet] CLIENT_ID 모니터링  : ' + monClientId);
+        Logger.log('[initMonitoringSheet] CLIENT_ID 일치여부  : ' + (mainClientId === monClientId));
+    } catch (e) {
+        Logger.log('[initMonitoringSheet] 모니터링 시트 열기 실패: ' + e.message);
+    }
+}
+
+/**
+ * 토큰 관련 설정 저장.
+ * 모니터링 시트(G_MON_SS)와 매핑테이블 시트(G_SS) 양쪽 모두 저장한다.
+ */
+function setTokenConfig_(key, value) {
+    if (G_MON_SS) setConfig(G_MON_SS, key, value);
+    setConfig(G_SS, key, value);
+}
+
 function readConfig(ss) {
     const sh = ss.getSheetByName(SH.CONFIG);
     if (!sh) throw new Error('[설정] 시트 없음');
@@ -1008,7 +957,7 @@ function notifyAdmin_(cfg, message) {
 }
 
 // 토큰 자동 갱신 및 만료 사전 알림
-function ensureTokenRefreshIfNeeded_(ss, cfg) {
+function ensureTokenRefreshIfNeeded_(cfg) {
     if (!cfg) return false;
 
     const accessExp = cfg[KEY.TOKEN_EXPIRES_AT];
@@ -1024,11 +973,11 @@ function ensureTokenRefreshIfNeeded_(ss, cfg) {
     const accessDt = parseDate(accessExp);
     const refreshDt = parseDate(refreshExp);
 
-    // refresh_token 만료 1일 전 경고 (목표 B)
+    // refresh_token 만료 7일 전 경고
     if (refreshDt) {
         const daysLeft = Math.ceil((refreshDt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysLeft === 1) {
-            notifyAdmin_(cfg, `🚨 Refresh token 만료 1일 전 경고: (${refreshExp})\n내일 만료됩니다. 즉시 재인증 준비 필요`);
+        if (daysLeft === 7) {
+            notifyAdmin_(cfg, `Refresh token 만료 7일 전 경고: (${refreshExp})\n재인증 준비 필요`);
         }
         if (daysLeft <= 0) {
             notifyAdmin_(cfg, `Refresh token 만료됨 (${refreshExp})\n재인증 필요: OAuth 재인증 후 새 토큰을 [설정] 시트에 반영하세요.`);
@@ -1042,10 +991,10 @@ function ensureTokenRefreshIfNeeded_(ss, cfg) {
             const r = refreshCafe24Token(cfg);
             cfg[KEY.C24_ACCESS_TOKEN] = r.access_token;
             if (r.refresh_token) cfg[KEY.C24_REFRESH_TOKEN] = r.refresh_token;
-            setConfig(ss, KEY.C24_ACCESS_TOKEN, r.access_token);
-            if (r.refresh_token) setConfig(ss, KEY.C24_REFRESH_TOKEN, r.refresh_token);
-            if (r.expires_at) setConfig(ss, KEY.TOKEN_EXPIRES_AT, r.expires_at);
-            if (r.refresh_token_expires_at) setConfig(ss, KEY.REFRESH_EXPIRES_AT, r.refresh_token_expires_at);
+            setTokenConfig_(KEY.C24_ACCESS_TOKEN, r.access_token);
+            if (r.refresh_token) setTokenConfig_(KEY.C24_REFRESH_TOKEN, r.refresh_token);
+            if (r.expires_at) setTokenConfig_(KEY.TOKEN_EXPIRES_AT, r.expires_at);
+            if (r.refresh_token_expires_at) setTokenConfig_(KEY.REFRESH_EXPIRES_AT, r.refresh_token_expires_at);
             Logger.log('자동 토큰 갱신 완료 (2시간 이내 만료)');
             return true;
         }
@@ -1078,23 +1027,6 @@ function ensureTokenExpiryKeys() {
     ensureRow(KEY.TOKEN_EXPIRES_AT);
     ensureRow(KEY.REFRESH_EXPIRES_AT);
     Logger.log('[ensureTokenExpiryKeys] TOKEN_EXPIRES_AT/REFRESH_EXPIRES_AT 추가 완료');
-}
-
-// Vercel cron 토큰 만료 체크 호출
-function checkTokenExpiry() {
-    try {
-        const url = 'https://web-cadalog-ver10.vercel.app/api/cron/check-token-expiry';
-        const response = UrlFetchApp.fetch(url, { method: 'GET', muteHttpExceptions: true });
-        const data = JSON.parse(response.getContentText());
-        Logger.log('✅ checkTokenExpiry 결과: ' + JSON.stringify(data));
-
-        if (data.status !== 'ok') {
-            notifyAdmin_(G_CFG, '🚨 토큰 갱신 실패: ' + JSON.stringify(data));
-        }
-    } catch (e) {
-        Logger.log('❌ checkTokenExpiry 오류: ' + e.message);
-        notifyAdmin_(G_CFG, '🚨 checkTokenExpiry 오류: ' + e.message);
-    }
 }
 
 // 특정 품목의 가격 비교 로그 출력 (매핑테이블)
@@ -1182,18 +1114,21 @@ function setCustomVariantCodes() {
     const cfg = readConfig(ss);
     G_CFG = cfg;
     G_SS = ss;
-    G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || '';
+    initMonitoringSheet_(G_CFG);
+    G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
 
     // 토큰 갱신
     try {
-        const r = refreshCafe24Token(cfg);
+        const r = refreshCafe24Token(G_CFG);
         G_TOKEN = r.access_token;
-        setConfig(ss, KEY.C24_ACCESS_TOKEN, G_TOKEN);
         G_CFG[KEY.C24_ACCESS_TOKEN] = G_TOKEN;
+        setTokenConfig_(KEY.C24_ACCESS_TOKEN, G_TOKEN);
         if (r.refresh_token) {
-            setConfig(ss, KEY.C24_REFRESH_TOKEN, r.refresh_token);
             G_CFG[KEY.C24_REFRESH_TOKEN] = r.refresh_token;
+            setTokenConfig_(KEY.C24_REFRESH_TOKEN, r.refresh_token);
         }
+        if (r.expires_at) { G_CFG[KEY.TOKEN_EXPIRES_AT] = r.expires_at; setTokenConfig_(KEY.TOKEN_EXPIRES_AT, r.expires_at); }
+        if (r.refresh_token_expires_at) { G_CFG[KEY.REFRESH_EXPIRES_AT] = r.refresh_token_expires_at; setTokenConfig_(KEY.REFRESH_EXPIRES_AT, r.refresh_token_expires_at); }
         Logger.log('[setCustomVariantCodes] 토큰 갱신 성공');
     } catch (e) {
         Logger.log('[setCustomVariantCodes] 토큰 갱신 실패 (기존 사용): ' + e.message);
