@@ -62,6 +62,20 @@ let G_CONSEC_FAIL = 0;
 
 
 // ════════════════════════════════════════════════════════
+// ■ 커스텀 메뉴
+// ════════════════════════════════════════════════════════
+
+function onOpen() {
+    const ui = SpreadsheetApp.getUi();
+    ui.createMenu('🛠️ 카페24 동기화')
+        .addItem('카페24 캐시 전체 초기화', 'initCafe24Cache')
+        .addSeparator()
+        .addItem('트리거 설정 (1시간마다)', 'createTrigger')
+        .addToUi();
+}
+
+
+// ════════════════════════════════════════════════════════
 // ■ 메인 함수
 // ════════════════════════════════════════════════════════
 
@@ -277,17 +291,14 @@ function syncPrices() {
 // ════════════════════════════════════════════════════════
 
 function createTrigger() {
-    const triggers = ScriptApp.getProjectTriggers();
-    for (const t of triggers) {
-        const fn = t.getHandlerFunction();
-        if (fn === 'syncPrices' || fn === 'buildCafe24Cache' || fn === 'checkNewProducts') {
-            ScriptApp.deleteTrigger(t);
-        }
+    const targets = ['syncPrices', 'buildCafe24Cache', 'checkNewProducts', 'autoRefreshCafe24Token'];
+    for (const t of ScriptApp.getProjectTriggers()) {
+        if (targets.includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
     }
-    ScriptApp.newTrigger('buildCafe24Cache').timeBased().everyDays(1).create();
-    ScriptApp.newTrigger('checkNewProducts').timeBased().everyHours(2).create();
+    ScriptApp.newTrigger('autoRefreshCafe24Token').timeBased().everyHours(1).create();
+    ScriptApp.newTrigger('buildCafe24Cache').timeBased().everyHours(1).create();
     ScriptApp.newTrigger('syncPrices').timeBased().everyHours(1).create();
-    Logger.log('✅ buildCafe24Cache 매일 1회, checkNewProducts 2시간마다, syncPrices 매 60분 자동 트리거가 생성되었습니다.');
+    Logger.log('✅ autoRefreshCafe24Token / buildCafe24Cache / syncPrices — 각 1시간마다 트리거 생성 완료');
 }
 
 
@@ -485,6 +496,28 @@ function _rawPut(url, apiVersion, token, payload) {
 }
 
 
+/**
+ * 토큰 자동 갱신 — 트리거에서 호출 가능한 standalone 함수.
+ * G_CFG / G_SS 가 초기화된 상태에서도 호출 가능 (buildCafe24Cache 내부).
+ * 갱신 성공 시 [설정] 시트와 G_CFG 모두 업데이트.
+ */
+function autoRefreshCafe24Token() {
+    const ss = G_SS || getSpreadsheet();
+    const cfg = G_CFG || readConfig(ss);
+    if (!G_SS) { G_SS = ss; G_CFG = cfg; }
+
+    const data = refreshCafe24Token(cfg);
+    setConfig(ss, KEY.C24_ACCESS_TOKEN, data.access_token);
+    cfg[KEY.C24_ACCESS_TOKEN] = data.access_token;
+    if (data.refresh_token) {
+        setConfig(ss, KEY.C24_REFRESH_TOKEN, data.refresh_token);
+        cfg[KEY.C24_REFRESH_TOKEN] = data.refresh_token;
+    }
+    if (data.expires_at) setConfig(ss, KEY.TOKEN_EXPIRES_AT, data.expires_at);
+    if (data.refresh_token_expires_at) setConfig(ss, KEY.REFRESH_EXPIRES_AT, data.refresh_token_expires_at);
+    Logger.log('✅ [autoRefreshCafe24Token] 토큰 갱신 완료');
+}
+
 /** Refresh Token → 새 Access Token */
 function refreshCafe24Token(cfg) {
     Logger.log('[refreshCafe24Token] 실제사용 CLIENT_ID: ' + (cfg[KEY.C24_CLIENT_ID] || '(없음)'));
@@ -650,7 +683,11 @@ function checkNewProducts() {
     }
 }
 
-function buildCafe24Cache() {
+/**
+ * 카페24 상품 캐시 전체 초기화 (시트 전체 삭제 후 전체 재다운로드).
+ * [초기화] 버튼 또는 최초 1회 실행용.
+ */
+function initCafe24Cache() {
     const ss = getSpreadsheet();
     const cfg = readConfig(ss);
     G_CFG = cfg;
@@ -658,61 +695,173 @@ function buildCafe24Cache() {
     initMonitoringSheet_(G_CFG);
     G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
 
-    // 토큰 자동 갱신 시도 (2시간 이내 만료)
     try {
         const refreshed = ensureTokenRefreshIfNeeded_(cfg);
-        if (refreshed) {
-            G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
-            Logger.log('[buildCafe24Cache] 토큰 자동 갱신 성공');
-        }
+        if (refreshed) G_TOKEN = cfg[KEY.C24_ACCESS_TOKEN] || G_TOKEN;
     } catch (e) {
-        Logger.log('[buildCafe24Cache] 토큰 갱신 실패 (기존 사용): ' + e.message);
-        notifyAdmin_(cfg, `buildCafe24Cache 토큰 갱신 실패: ${e.message}\n재인증 필요: OAuth 재인증 후 새 토큰을 [설정] 시트에 반영하세요.`);
+        Logger.log('[initCafe24Cache] 토큰 갱신 실패 (기존 사용): ' + e.message);
+        notifyAdmin_(cfg, `initCafe24Cache 토큰 갱신 실패: ${e.message}\n재인증 필요`);
     }
 
     const mallId = cfg[KEY.C24_MALL_ID];
     const apiVer = cfg[KEY.C24_API_VERSION] || '2025-12-01';
-    const props = PropertiesService.getScriptProperties();
-    const offset = parseInt(props.getProperty('C24_CACHE_OFFSET') || '0', 10);
     const limit = 100;
+    const header = ['product_no', 'product_code', 'product_name', 'custom_variant_code', 'variant_code', 'additional_amount'];
 
-    Logger.log(`[buildCafe24Cache] 상품 목록 조회 offset=${offset}, limit=${limit}`);
-    const products = fetchCafe24ProductsPage_(mallId, apiVer, offset, limit);
-    if (!products) {
-        Logger.log('[buildCafe24Cache] 상품 목록 조회 실패');
+    // [카페24상품] 시트 전체 초기화
+    let sh = ss.getSheetByName('카페24상품');
+    if (!sh) sh = ss.insertSheet('카페24상품');
+    sh.clearContents();
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+
+    // ScriptProperties 리셋
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty('C24_CACHE_OFFSET', '0');
+    props.setProperty('C24_CACHE_DONE', 'false');
+
+    let offset = 0;
+    let totalVariants = 0;
+    let totalSaved = 0;
+
+    while (true) {
+        Logger.log(`[initCafe24Cache] offset=${offset} 조회 중...`);
+        const products = fetchCafe24ProductsPage_(mallId, apiVer, offset, limit);
+        if (!products) { Logger.log('[initCafe24Cache] 상품 목록 조회 실패 — 중단'); break; }
+
+        const rows = [];
+        let pageVariants = 0;
+        for (const product of products) {
+            const productNo = String(product.product_no || '');
+            const productCode = String(product.product_code || '');
+            const productName = String(product.product_name || '');
+            if (!productNo) continue;
+            const variants = fetchProductVariants(mallId, apiVer, productNo);
+            for (const v of variants) {
+                pageVariants++;
+                const customCode = String(v.custom_variant_code || '').trim();
+                if (!customCode) continue;
+                const variantCode = String(v.variant_code || '').trim();
+                const price = parseFloat(String(v.additional_amount || '0').replace(/,/g, '')) || 0;
+                rows.push([productNo, productCode, productName, customCode, variantCode, price]);
+            }
+        }
+
+        if (rows.length > 0) {
+            const startRow = sh.getLastRow() + 1;
+            sh.getRange(startRow, 1, rows.length, header.length).setValues(rows);
+        }
+
+        totalVariants += pageVariants;
+        totalSaved += rows.length;
+        Logger.log(`[initCafe24Cache] offset=${offset} variants=${pageVariants} 저장=${rows.length} (누적 ${totalSaved}건 / 전체 ${totalVariants}건)`);
+
+        if (products.length < limit) break;
+        offset += limit;
+    }
+
+    setCafe24CacheState_(true, 0);
+    Logger.log(`[initCafe24Cache] ✅ 완료 — 저장 ${totalSaved}건 / 전체 variants ${totalVariants}건 / 미설정 제외 ${totalVariants - totalSaved}건`);
+}
+
+/**
+ * 카페24 상품 캐시 증분 업데이트 (1시간 트리거 실행).
+ * 기존 시트와 API 결과를 비교하여 신규 추가 / 삭제된 항목만 반영.
+ * 시트 없으면 initCafe24Cache() 위임.
+ */
+function buildCafe24Cache() {
+    const ss = getSpreadsheet();
+    const cfg = readConfig(ss);
+    G_CFG = cfg;
+    G_SS = ss;
+    initMonitoringSheet_(G_CFG);
+
+    // 트리거 실행 시 토큰 자동 갱신
+    try {
+        autoRefreshCafe24Token();
+    } catch (e) {
+        Logger.log('[buildCafe24Cache] 토큰 갱신 실패: ' + e.message);
+        notifyAdmin_(cfg, `buildCafe24Cache 토큰 갱신 실패: ${e.message}`);
+    }
+    G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
+
+    const mallId = cfg[KEY.C24_MALL_ID];
+    const apiVer = cfg[KEY.C24_API_VERSION] || '2025-12-01';
+    const limit = 100;
+    const header = ['product_no', 'product_code', 'product_name', 'custom_variant_code', 'variant_code', 'additional_amount'];
+
+    // 기존 시트 로드
+    const sh = ss.getSheetByName('카페24상품');
+    if (!sh) {
+        Logger.log('[buildCafe24Cache] [카페24상품] 시트 없음 → initCafe24Cache() 실행');
+        initCafe24Cache();
         return;
     }
 
-    const rows = [];
-    for (const product of products) {
-        const productNo = String(product.product_no || '');
-        const productCode = String(product.product_code || '');
-        const productName = String(product.product_name || '');
-        if (!productNo) continue;
-        const variants = fetchProductVariants(mallId, apiVer, productNo);
-        for (const v of variants) {
-            const customCode = String(v.custom_variant_code || '').trim();
-            const variantCode = String(v.variant_code || '').trim();
-            const price = parseFloat(String(v.additional_amount || '0').replace(/,/g, '')) || 0;
-            rows.push([productNo, productCode, productName, customCode, variantCode, price]);
+    const existingData = sh.getDataRange().getValues();
+    // custom_variant_code(col D, idx 3) → 행 데이터
+    const existingMap = new Map();
+    for (let i = 1; i < existingData.length; i++) {
+        const code = String(existingData[i][3] || '').trim();
+        if (code) existingMap.set(code, existingData[i]);
+    }
+
+    // API 전체 조회
+    let offset = 0;
+    const apiMap = new Map();
+    while (true) {
+        const products = fetchCafe24ProductsPage_(mallId, apiVer, offset, limit);
+        if (!products) break;
+        for (const product of products) {
+            const productNo = String(product.product_no || '');
+            const productCode = String(product.product_code || '');
+            const productName = String(product.product_name || '');
+            if (!productNo) continue;
+            const variants = fetchProductVariants(mallId, apiVer, productNo);
+            for (const v of variants) {
+                const customCode = String(v.custom_variant_code || '').trim();
+                if (!customCode) continue;
+                const variantCode = String(v.variant_code || '').trim();
+                const price = parseFloat(String(v.additional_amount || '0').replace(/,/g, '')) || 0;
+                apiMap.set(customCode, [productNo, productCode, productName, customCode, variantCode, price]);
+            }
         }
+        if (products.length < limit) break;
+        offset += limit;
     }
 
-    writeCafe24SheetBatch(ss, rows, offset === 0);
-    Logger.log(`[buildCafe24Cache] rows=${rows.length} 기록 완료`);
-
-    if (products.length < limit) {
-        setCafe24CacheState_(true, 0);
-        Logger.log('[buildCafe24Cache] 캐시 완료');
-    } else {
-        setCafe24CacheState_(false, offset + limit);
-        Logger.log(`[buildCafe24Cache] 캐시 진행중 → 다음 offset=${offset + limit}`);
+    // 비교: 신규 추가 / 삭제
+    const toAdd = [];
+    for (const [code, row] of apiMap) {
+        if (!existingMap.has(code)) toAdd.push(row);
     }
+
+    const toRemove = new Set();
+    for (const code of existingMap.keys()) {
+        if (!apiMap.has(code)) toRemove.add(code);
+    }
+
+    // 삭제 있으면 시트 재구성
+    if (toRemove.size > 0) {
+        const kept = existingData.filter((row, i) => {
+            if (i === 0) return true; // 헤더 유지
+            return !toRemove.has(String(row[3] || '').trim());
+        });
+        sh.clearContents();
+        if (kept.length > 0) sh.getRange(1, 1, kept.length, header.length).setValues(kept);
+    }
+
+    // 신규 추가
+    if (toAdd.length > 0) {
+        const startRow = sh.getLastRow() + 1;
+        sh.getRange(startRow, 1, toAdd.length, header.length).setValues(toAdd);
+    }
+
+    Logger.log(`[buildCafe24Cache] ✅ 증분 완료 — 신규 추가 ${toAdd.length}건 / 삭제 ${toRemove.size}건 / 기존 ${existingMap.size}건`);
 }
 
-/** 카페24 상품 목록 페이지 조회 */
+/** 카페24 상품 목록 페이지 조회 (판매함만) */
 function fetchCafe24ProductsPage_(mallId, apiVersion, offset, limit) {
-    const url = `https://${mallId}.cafe24api.com/api/v2/admin/products?limit=${limit}&offset=${offset}&fields=product_no,product_code,product_name`;
+    const url = `https://${mallId}.cafe24api.com/api/v2/admin/products?limit=${limit}&offset=${offset}&selling=T&fields=product_no,product_code,product_name`;
     const res = c24Get(url, apiVersion);
     if (!res.ok) {
         Logger.log('상품 목록 조회 오류: ' + res.status + ' ' + res.body.substring(0, 100));

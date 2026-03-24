@@ -34,9 +34,7 @@ function checkAll() {
 
   checkCafe24Token(dashboard);
   checkRedis(dashboard, snapshotData);
-  checkProducts(dashboard);
   checkSyncProducts(dashboard, snapshotData);
-  checkPrices(dashboard);
   checkVercel(dashboard);
 
   SpreadsheetApp.getUi().alert('✅ 모든 체크가 완료되었습니다.');
@@ -44,19 +42,39 @@ function checkAll() {
 
 function checkCafe24Token(sheet) {
   try {
-    const response = UrlFetchApp.fetch(BASE_URL + '/api/cron/check-token-expiry');
-    const data = JSON.parse(response.getContentText());
-    const daysLeft = data.daysLeft;
-    const expiresAt = data.expiresAt;
-    let status = '🟢정상';
-    if (daysLeft <= 0) status = '🔴만료';
-    else if (daysLeft <= 7) status = '🟡D-7경고';
-    updateDashboard(sheet, 2, 'Cafe24 Access Token', status, "만료: " + expiresAt, '[갱신]');
-    updateDashboard(sheet, 3, 'Cafe24 Refresh Token', status, "D-" + daysLeft + " 남음", '[재인증URL]');
-    if (status !== '🟢정상') {
-      sendAlert("⚠️ [웹카달로그] 토큰 만료 위험 (" + status + ")", "토큰이 " + daysLeft + "일 후 만료됩니다. 즉시 확인하세요.\n만료일: " + expiresAt);
+    // Vercel 엔드포인트 대신 모니터링 시트 [설정]에서 직접 읽기 (504 타임아웃 방지)
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const cfg = getConfigFromSheet_(ss.getSheetByName('설정'));
+
+    const accessExpiresAt = cfg['TOKEN_EXPIRES_AT'] ? new Date(cfg['TOKEN_EXPIRES_AT']) : null;
+    const refreshExpiresAt = cfg['REFRESH_EXPIRES_AT'] ? new Date(cfg['REFRESH_EXPIRES_AT']) : null;
+
+    // access_token 상태
+    const now = new Date();
+    let accessStatus = '🟢정상';
+    let accessDetail = accessExpiresAt ? '만료: ' + Utilities.formatDate(accessExpiresAt, 'Asia/Seoul', 'MM-dd HH:mm') : '만료일 없음';
+    if (!accessExpiresAt || accessExpiresAt <= now) accessStatus = '🔴만료';
+    else if ((accessExpiresAt - now) < 30 * 60 * 1000) accessStatus = '🟡30분미만';
+    updateDashboard(sheet, 2, 'Cafe24 Access Token', accessStatus, accessDetail, '[갱신]');
+    logResult('Cafe24 Access Token', accessStatus, accessDetail);
+
+    // refresh_token 상태
+    let refreshStatus = '🟢정상';
+    let daysLeft = -1;
+    let refreshDetail = '만료일 없음';
+    if (refreshExpiresAt) {
+      daysLeft = Math.floor((refreshExpiresAt - now) / (1000 * 60 * 60 * 24));
+      refreshDetail = 'D-' + daysLeft + ' (' + Utilities.formatDate(refreshExpiresAt, 'Asia/Seoul', 'MM-dd') + ')';
+      if (daysLeft <= 0) refreshStatus = '🔴만료';
+      else if (daysLeft <= 1) refreshStatus = '🔴D-1경고';
+      else if (daysLeft <= 7) refreshStatus = '🟡D-7경고';
     }
-    logResult('Cafe24 Token', status, "Days left: " + daysLeft);
+    updateDashboard(sheet, 3, 'Cafe24 Refresh Token', refreshStatus, refreshDetail, '[재인증URL]');
+    logResult('Cafe24 Refresh Token', refreshStatus, refreshDetail);
+
+    if (refreshStatus !== '🟢정상') {
+      sendAlert('⚠️ [웹카달로그] 토큰 만료 위험 (' + refreshStatus + ')', '토큰이 ' + daysLeft + '일 후 만료됩니다. 즉시 확인하세요.\n만료일: ' + refreshExpiresAt);
+    }
   } catch (e) {
     updateDashboard(sheet, 2, 'Cafe24 Access Token', '🔴오류', e.message);
     logResult('Cafe24 Token', '🔴오류', e.message);
@@ -77,20 +95,6 @@ function checkRedis(sheet, data) {
   }
 }
 
-function checkProducts(sheet) {
-  try {
-    const response = UrlFetchApp.fetch(BASE_URL + '/api/products');
-    const data = JSON.parse(response.getContentText());
-    const count = data.products ? data.products.length : 0;
-    const status = count > 0 ? '🟢정상' : '🔴오류';
-    updateDashboard(sheet, 5, '/api/products', status, "상품수: " + count, '-');
-    logResult('Products API', status, "Count: " + count);
-  } catch (e) {
-    updateDashboard(sheet, 5, '/api/products', '🔴오류', e.message);
-    logResult('Products API', '🔴오류', e.message);
-  }
-}
-
 function checkSyncProducts(sheet, data) {
   try {
     if (!data) throw new Error('debug-snapshot 데이터 없음');
@@ -101,19 +105,6 @@ function checkSyncProducts(sheet, data) {
     logResult('Sync Products', status, "Snapshot count: " + productCount);
   } catch (e) {
     updateDashboard(sheet, 6, '/api/sync-products', '🔴오류', e.message);
-  }
-}
-
-function checkPrices(sheet) {
-  try {
-    const response = UrlFetchApp.fetch(BASE_URL + '/api/prices');
-    const data = JSON.parse(response.getContentText());
-    const count = Object.keys(data || {}).length;
-    const status = count > 0 ? '🟢정상' : '🔴오류';
-    updateDashboard(sheet, 7, '가격데이터', status, "항목수: " + count, '[갱신]');
-    logResult('Price Data', status, "Count: " + count);
-  } catch (e) {
-    updateDashboard(sheet, 7, '가격데이터', '🔴오류', e.message);
   }
 }
 
@@ -143,24 +134,6 @@ function logResult(item, status, detail) {
 
 function sendAlert(subject, body) {
   MailApp.sendEmail({ to: ALERT_EMAIL, subject: subject, body: body });
-}
-
-function refreshTokens() {
-  const response = UrlFetchApp.fetch(BASE_URL + '/api/init-tokens', { method: 'post' });
-  SpreadsheetApp.getUi().alert('토큰 초기화 응답: ' + response.getContentText());
-  checkAll();
-}
-
-function syncProducts() {
-  const response = UrlFetchApp.fetch(BASE_URL + '/api/sync-products');
-  SpreadsheetApp.getUi().alert('동기화 시작 응답: ' + response.getContentText());
-  checkAll();
-}
-
-function refreshPrices() {
-  const response = UrlFetchApp.fetch(BASE_URL + '/api/prices?refresh=true');
-  SpreadsheetApp.getUi().alert('가격 갱신 응답: ' + response.getContentText());
-  checkAll();
 }
 
 function openReauthUrl() {
@@ -210,6 +183,8 @@ function refreshCafe24Token() {
       // 1. 구글시트 [설정] 탭 업데이트
       setConfigToSheet_(sheet, 'CAFE24_ACCESS_TOKEN', data.access_token);
       setConfigToSheet_(sheet, 'CAFE24_REFRESH_TOKEN', data.refresh_token);
+      if (data.expires_at) setConfigToSheet_(sheet, 'TOKEN_EXPIRES_AT', data.expires_at);
+      if (data.refresh_token_expires_at) setConfigToSheet_(sheet, 'REFRESH_EXPIRES_AT', data.refresh_token_expires_at);
 
       // 2. Redis + Vercel 업데이트
       UrlFetchApp.fetch('https://web-cadalog-ver10.vercel.app/api/token-update', {
