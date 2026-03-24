@@ -170,3 +170,101 @@ function openReauthUrl() {
   const userInterface = HtmlService.createHtmlOutput(html).setWidth(200).setHeight(100);
   SpreadsheetApp.getUi().showModalDialog(userInterface, '재인증 페이지로 이동 중...');
 }
+
+function refreshCafe24Token() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('설정');
+    if (!sheet) throw new Error('[설정] 시트 없음');
+
+    const cfg = getConfigFromSheet_(sheet);
+
+    const mallId = cfg.MALL_ID || cfg.CAFE24_MALL_ID;
+    const clientId = cfg.CAFE24_CLIENT_ID;
+    const clientSecret = cfg.CAFE24_CLIENT_SECRET;
+    const refreshToken = cfg.CAFE24_REFRESH_TOKEN;
+
+    if (!mallId || !clientId || !clientSecret || !refreshToken) {
+      Logger.log('❌ 필수 설정값 누락: ' + JSON.stringify({ mallId: !!mallId, clientId: !!clientId, clientSecret: !!clientSecret, refreshToken: !!refreshToken }));
+      return;
+    }
+
+    const credentials = Utilities.base64Encode(clientId + ':' + clientSecret);
+
+    const response = UrlFetchApp.fetch(
+      'https://' + mallId + '.cafe24api.com/api/v2/oauth/token',
+      {
+        method: 'post',
+        headers: {
+          'Authorization': 'Basic ' + credentials,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        payload: 'grant_type=refresh_token&refresh_token=' + refreshToken,
+        muteHttpExceptions: true
+      }
+    );
+
+    const data = JSON.parse(response.getContentText());
+
+    if (data.access_token) {
+      // 1. 구글시트 [설정] 탭 업데이트
+      setConfigToSheet_(sheet, 'CAFE24_ACCESS_TOKEN', data.access_token);
+      setConfigToSheet_(sheet, 'CAFE24_REFRESH_TOKEN', data.refresh_token);
+
+      // 2. Redis + Vercel 업데이트
+      UrlFetchApp.fetch('https://web-cadalog-ver10.vercel.app/api/token-update', {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          expires_at: new Date(data.expires_at).getTime(),
+          refresh_token_expires_at: new Date(data.refresh_token_expires_at).getTime()
+        }),
+        muteHttpExceptions: true
+      });
+
+      Logger.log('✅ 토큰 갱신 완료');
+    } else {
+      Logger.log('❌ 토큰 갱신 실패: ' + JSON.stringify(data));
+    }
+  } catch (e) {
+    Logger.log('❌ refreshCafe24Token 오류: ' + e.message);
+  }
+}
+
+function getConfigFromSheet_(sheet) {
+  const data = sheet.getDataRange().getValues();
+  const cfg = {};
+  data.forEach(row => { if (row[0]) cfg[row[0]] = row[1]; });
+  return cfg;
+}
+
+function setConfigToSheet_(sheet, key, value) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 0; i < data.length; i++) {
+    if (data[i][0] === key) {
+      sheet.getRange(i + 1, 2).setValue(value);
+      return;
+    }
+  }
+  sheet.appendRow([key, value]);
+}
+
+function createTrigger() {
+  // 기존 트리거 중복 방지
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(t => {
+    if (t.getHandlerFunction() === 'refreshCafe24Token') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  // refreshCafe24Token 1시간마다 실행
+  ScriptApp.newTrigger('refreshCafe24Token')
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  Logger.log('✅ refreshCafe24Token 트리거 등록 완료 (1시간 간격)');
+}

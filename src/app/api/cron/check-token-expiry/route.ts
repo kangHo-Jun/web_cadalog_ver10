@@ -97,31 +97,13 @@ export async function GET() {
 
             if (msLeft <= 30 * 60 * 1000) {
                 console.log('🔄 Access token expiring soon — refreshing...');
-                const MAX_RETRY = 3;
-                const RETRY_INTERVAL_MS = 15 * 60 * 1000; // 15분
-
-                let refreshSuccess = false;
-                for (let i = 0; i < MAX_RETRY; i++) {
-                    try {
-                        await refreshAccessToken();
-                        result.access_token_refreshed = true;
-                        result.retry_count = i;
-                        refreshSuccess = true;
-                        console.log(`✅ 토큰 갱신 성공 (${i + 1}회 시도)`);
-                        break;
-                    } catch (refreshErr: any) {
-                        console.error(`❌ 갱신 실패 (${i + 1}/${MAX_RETRY}):`, refreshErr.message);
-                        result.access_token_refresh_failed = refreshErr.message;
-                        if (i < MAX_RETRY - 1) {
-                            await new Promise(resolve => setTimeout(resolve, RETRY_INTERVAL_MS));
-                        }
-                    }
-                }
-
-                // 3회 모두 실패 시 이메일 발송
-                if (!refreshSuccess) {
+                try {
+                    await refreshAccessToken();
+                    result.access_token_refreshed = true;
+                } catch (refreshErr: any) {
+                    console.error('❌ Auto-refresh failed:', refreshErr.message);
                     await sendExpiryEmail(-1, new Date(accessExpiresAt));
-                    console.error('🚨 3회 재시도 모두 실패 — 이메일 발송');
+                    result.access_token_refresh_failed = refreshErr.message;
                 }
             } else {
                 result.access_token_expires_in_min = minLeft;
