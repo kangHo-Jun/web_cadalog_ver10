@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from 'redis';
 import nodemailer from 'nodemailer';
-import { refreshAccessToken } from '@/lib/cafe24-auth';
+// refreshAccessToken 제거 — 토큰 갱신은 monitoring-gas(1시간)가 단독 담당
+// 이 endpoint는 refresh_token 만료 알림 전용
 
 const TOKEN_KEY = 'cafe24_tokens';
 const ALERT_DAYS = 1; // 하루 전 알림 (목표 B)
@@ -88,26 +89,13 @@ export async function GET() {
         const now = Date.now();
         const result: Record<string, unknown> = {};
 
-        // ── 목표 A: access_token 만료 30분 전이면 자동 갱신 ─────────
+        // access_token 만료 잔여 시간 확인 (갱신은 monitoring-gas 담당)
         const accessExpiresAt = tokens.expires_at ? Number(tokens.expires_at) : null;
         if (accessExpiresAt) {
             const msLeft = accessExpiresAt - now;
             const minLeft = Math.floor(msLeft / (1000 * 60));
             console.log(`🕐 Access Token expires in ${minLeft} minutes`);
-
-            if (msLeft <= 30 * 60 * 1000) {
-                console.log('🔄 Access token expiring soon — refreshing...');
-                try {
-                    await refreshAccessToken();
-                    result.access_token_refreshed = true;
-                } catch (refreshErr: any) {
-                    console.error('❌ Auto-refresh failed:', refreshErr.message);
-                    await sendExpiryEmail(-1, new Date(accessExpiresAt));
-                    result.access_token_refresh_failed = refreshErr.message;
-                }
-            } else {
-                result.access_token_expires_in_min = minLeft;
-            }
+            result.access_token_expires_in_min = minLeft;
         }
 
         // ── 목표 B: refresh_token 만료 1일 전 알림 ──────────────────

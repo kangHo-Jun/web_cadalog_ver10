@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "app/api/cron/check-token-expiry/route.ts": {
-      "maxDuration": 30
-    }
-  },
   "crons": [
     {
       "path": "/api/cron/sync-products",

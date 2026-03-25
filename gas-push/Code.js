@@ -268,10 +268,10 @@ function createTrigger() {
     for (const t of ScriptApp.getProjectTriggers()) {
         if (targets.includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
     }
-    ScriptApp.newTrigger('autoRefreshCafe24Token').timeBased().everyHours(1).create();
+    // autoRefreshCafe24Token 트리거 제거 — 토큰 갱신은 monitoring-gas(1시간)가 단독 담당
     ScriptApp.newTrigger('buildCafe24Cache').timeBased().everyHours(1).create();
     // syncPrices는 고정 트리거 없음 — buildCafe24Cache 완료 후 10분 딜레이 one-time 트리거로 실행
-    Logger.log('✅ autoRefreshCafe24Token / buildCafe24Cache — 각 1시간마다 트리거 생성 완료 (syncPrices는 buildCafe24Cache 완료 후 자동 예약)');
+    Logger.log('✅ buildCafe24Cache — 1시간마다 트리거 생성 완료 (syncPrices는 buildCafe24Cache 완료 후 자동 예약 / 토큰 갱신은 monitoring-gas 담당)');
 }
 
 /**
@@ -766,15 +766,7 @@ function buildCafe24Cache() {
     const cfg = readConfig(ss);
     G_CFG = cfg;
     G_SS = ss;
-    initMonitoringSheet_(G_CFG);
-
-    // 트리거 실행 시 토큰 자동 갱신
-    try {
-        autoRefreshCafe24Token();
-    } catch (e) {
-        Logger.log('[buildCafe24Cache] 토큰 갱신 실패: ' + e.message);
-        notifyAdmin_(cfg, `buildCafe24Cache 토큰 갱신 실패: ${e.message}`);
-    }
+    initMonitoringSheet_(G_CFG);  // 모니터링 시트(monitoring-gas 갱신 담당)에서 최신 토큰 로드
     G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
 
     const mallId = cfg[KEY.C24_MALL_ID];
