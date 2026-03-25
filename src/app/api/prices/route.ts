@@ -123,7 +123,15 @@ export async function GET() {
             }, {} as any);
         }
 
-        return NextResponse.json(enhancedPrices, {
+        return NextResponse.json({
+            ...enhancedPrices,
+            _debug: isTestPeriod ? {
+                isTestPeriod,
+                targetCodesCount: targetCodesArray.length,
+                sampleTarget: targetCodesArray.slice(0, 5),
+                sampleCurrent: Object.keys(currentPrices).slice(0, 5),
+            } : undefined
+        }, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0, must-revalidate',
                 'Pragma': 'no-cache',
