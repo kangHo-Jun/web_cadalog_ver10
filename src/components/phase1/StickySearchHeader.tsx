@@ -25,9 +25,11 @@ export default function StickySearchHeader({
             style={{ background: '#123628' }}
         >
             {/* Brand */}
-            <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
-                Daesan
-            </span>
+            <a href="https://daesan.ai" target="_self">
+                <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
+                    DAESAN
+                </span>
+            </a>
 
             {/* Search input */}
             <div className="flex-1 flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2 border border-white/20">

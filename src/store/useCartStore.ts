@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export interface CartProduct {
     product_no: number;
@@ -28,88 +29,96 @@ interface CartStore {
     totalAmount: () => number;
 }
 
-export const useCartStore = create<CartStore>((set, get) => ({
-    items: [],
-    lastAddedProductNo: null,
+export const useCartStore = create<CartStore>()(
+    persist(
+        (set, get) => ({
+            items: [],
+            lastAddedProductNo: null,
 
-    addToCart: (product: CartProduct, quantity = 1) => {
-        set((state) => {
-            const existingIndex = state.items.findIndex(
-                (item) => item.product.product_no === product.product_no
-            );
+            addToCart: (product: CartProduct, quantity = 1) => {
+                set((state) => {
+                    const existingIndex = state.items.findIndex(
+                        (item) => item.product.product_no === product.product_no
+                    );
 
-            let newItems;
-            if (existingIndex !== -1) {
-                newItems = [...state.items];
-                newItems[existingIndex] = {
-                    ...newItems[existingIndex],
-                    quantity: newItems[existingIndex].quantity + quantity,
-                };
-            } else {
-                newItems = [...state.items, { product, quantity }];
-            }
+                    let newItems;
+                    if (existingIndex !== -1) {
+                        newItems = [...state.items];
+                        newItems[existingIndex] = {
+                            ...newItems[existingIndex],
+                            quantity: newItems[existingIndex].quantity + quantity,
+                        };
+                    } else {
+                        newItems = [...state.items, { product, quantity }];
+                    }
 
-            return {
-                items: newItems,
-                lastAddedProductNo: product.product_no,
-            };
-        });
-    },
+                    return {
+                        items: newItems,
+                        lastAddedProductNo: product.product_no,
+                    };
+                });
+            },
 
-    undoLastAdd: () => {
-        set((state) => {
-            if (state.lastAddedProductNo === null) return state;
+            undoLastAdd: () => {
+                set((state) => {
+                    if (state.lastAddedProductNo === null) return state;
 
-            const productNo = state.lastAddedProductNo;
-            const existingIndex = state.items.findIndex(
-                (item) => item.product.product_no === productNo
-            );
+                    const productNo = state.lastAddedProductNo;
+                    const existingIndex = state.items.findIndex(
+                        (item) => item.product.product_no === productNo
+                    );
 
-            if (existingIndex === -1) return { ...state, lastAddedProductNo: null };
+                    if (existingIndex === -1) return { ...state, lastAddedProductNo: null };
 
-            const currentQuantity = state.items[existingIndex].quantity;
-            let newItems;
+                    const currentQuantity = state.items[existingIndex].quantity;
+                    let newItems;
 
-            if (currentQuantity <= 1) {
-                newItems = state.items.filter((item) => item.product.product_no !== productNo);
-            } else {
-                newItems = [...state.items];
-                newItems[existingIndex] = {
-                    ...newItems[existingIndex],
-                    quantity: currentQuantity - 1,
-                };
-            }
+                    if (currentQuantity <= 1) {
+                        newItems = state.items.filter((item) => item.product.product_no !== productNo);
+                    } else {
+                        newItems = [...state.items];
+                        newItems[existingIndex] = {
+                            ...newItems[existingIndex],
+                            quantity: currentQuantity - 1,
+                        };
+                    }
 
-            return {
-                items: newItems,
-                lastAddedProductNo: null,
-            };
-        });
-    },
+                    return {
+                        items: newItems,
+                        lastAddedProductNo: null,
+                    };
+                });
+            },
 
-    removeFromCart: (productNo: number) => {
-        set((state) => ({
-            items: state.items.filter((item) => item.product.product_no !== productNo),
-        }));
-    },
+            removeFromCart: (productNo: number) => {
+                set((state) => ({
+                    items: state.items.filter((item) => item.product.product_no !== productNo),
+                }));
+            },
 
-    updateCartQuantity: (productNo: number, delta: number) => {
-        set((state) => ({
-            items: state.items.map((item) =>
-                item.product.product_no === productNo
-                    ? { ...item, quantity: Math.max(1, item.quantity + delta) }
-                    : item
-            ),
-        }));
-    },
+            updateCartQuantity: (productNo: number, delta: number) => {
+                set((state) => ({
+                    items: state.items.map((item) =>
+                        item.product.product_no === productNo
+                            ? { ...item, quantity: Math.max(1, item.quantity + delta) }
+                            : item
+                    ),
+                }));
+            },
 
-    clearCart: () => set({ items: [] }),
+            clearCart: () => set({ items: [] }),
 
-    totalItems: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
+            totalItems: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
 
-    totalAmount: () =>
-        get().items.reduce(
-            (sum, item) => sum + Number(item.product.price) * item.quantity,
-            0
-        ),
-}));
+            totalAmount: () =>
+                get().items.reduce(
+                    (sum, item) => sum + Number(item.product.price) * item.quantity,
+                    0
+                ),
+        }),
+        {
+            name: 'daesan-cart-storage',
+            storage: createJSONStorage(() => localStorage),
+        }
+    )
+);
