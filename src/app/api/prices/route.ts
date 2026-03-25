@@ -27,18 +27,25 @@ export async function GET() {
             const snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
 
             // 철물/부자재(223) 카테고리 품목 추출
-            const targetCodes: string[] = [];
+            const targetCodes = new Set<string>();
             Object.values(snapshot).forEach((group: any) => {
-                if (group.categoryNo?.includes(223)) {
-                    group.children.forEach((child: any) => {
-                        if (child.variantCode) targetCodes.push(child.variantCode);
+                const categoryNos = Array.isArray(group.categoryNo) ? group.categoryNo : [];
+                const isHardware = categoryNos.some((cat: any) => String(cat) === '223');
+
+                if (isHardware) {
+                    group.children?.forEach((child: any) => {
+                        const code = child.variantCode || child.variant_code;
+                        if (code) targetCodes.add(String(code).trim());
                     });
                 }
             });
 
+            const targetCodesArray = Array.from(targetCodes);
+
             // 데이터 주입
             enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
-                const targetIndex = targetCodes.indexOf(code);
+                const trimmedCode = code.trim();
+                const targetIndex = targetCodesArray.indexOf(trimmedCode);
                 
                 if (targetIndex !== -1) {
                     // 3개 중 1개 순환 (Up, Down, Same)
