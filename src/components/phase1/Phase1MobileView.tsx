@@ -9,7 +9,8 @@ import {
     Plus, 
     Minus, 
     X, 
-    CheckCircle2
+    CheckCircle2,
+    Search
 } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
 import { GroupedProduct, ChildItem } from '@/lib/product-utils';
@@ -70,6 +71,7 @@ export default function Phase1MobileView() {
     const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
     const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
     const [bsQuantities, setBsQuantities] = useState<Record<string, number>>({});
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Cart Store
     const totalItems = useCartStore((s) => s.totalItems());
@@ -109,9 +111,18 @@ export default function Phase1MobileView() {
 
     // Filtered Groups
     const filteredGroups = useMemo(() => {
-        if (!selectedCategory) return allGroups;
-        return allGroups.filter(g => g.categoryNo?.includes(selectedCategory));
-    }, [allGroups, selectedCategory]);
+        const term = searchTerm.toLowerCase().trim();
+        if (!term) {
+            if (!selectedCategory) return allGroups;
+            return allGroups.filter(g => g.categoryNo?.includes(selectedCategory));
+        }
+        // Search across parent name or any child option name
+        return allGroups.filter(g => {
+            const matchParent = g.parentName.toLowerCase().includes(term);
+            const matchChild = g.children.some(c => c.name.toLowerCase().includes(term));
+            return matchParent || matchChild;
+        });
+    }, [allGroups, selectedCategory, searchTerm]);
 
     if (isLoading) return (
         <div className="min-h-screen bg-white flex items-center justify-center">
@@ -129,7 +140,29 @@ export default function Phase1MobileView() {
             
             <main className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch]">
                 <div className="flex flex-col h-full">
-                    {/* Category Chips - Sticky below Header */}
+                    {/* Search Bar - Fixed style below Header */}
+                    <div className="bg-white px-4 py-3 border-b border-gray-100">
+                        <div className="relative flex items-center bg-gray-100 rounded-full px-4 h-11 transition-all focus-within:ring-2 focus-within:ring-[#48BB78]/30 bg-white border border-gray-200 shadow-sm">
+                            <Search className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                            <input 
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="제품명 검색"
+                                className="flex-1 bg-transparent border-none outline-none px-3 text-sm text-gray-800 placeholder:text-gray-400"
+                            />
+                            {searchTerm && (
+                                <button 
+                                    onClick={() => setSearchTerm('')}
+                                    className="p-1 bg-gray-200 rounded-full text-gray-500 hover:text-gray-700"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Category Chips - Sticky below Search Bar */}
                     <div className="sticky top-0 bg-white border-b border-gray-100 px-3 py-3 flex gap-2 overflow-x-auto no-scrollbar z-40 shadow-sm">
                         <button
                             onClick={() => setSelectedCategory(null)}
@@ -154,22 +187,29 @@ export default function Phase1MobileView() {
 
                     {/* Product List */}
                     <div className="p-3 grid grid-cols-1 gap-2">
-                        {filteredGroups.map(group => (
-                            <button 
-                                key={group.id}
-                                onClick={() => setSelectedProduct(group)}
-                                className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-3 active:bg-gray-50 text-left"
-                            >
-                                <div className="w-12 h-12 bg-gray-50 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] text-gray-300">
-                                    {group.detail_image ? <img src={group.detail_image} alt={group.parentName} className="w-full h-full object-cover rounded-lg" /> : 'IMG'}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-[14px] font-bold text-gray-800 truncate">{group.parentName}</div>
-                                    <div className="text-[11px] text-gray-400 mt-0.5">{group.children.length}개 옵션</div>
-                                </div>
-                                <ChevronRight className="w-4 h-4 text-gray-300" />
-                            </button>
-                        ))}
+                        {filteredGroups.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                                <Search className="w-12 h-12 mb-4 opacity-10" />
+                                <p className="text-sm font-medium">검색 결과가 없습니다</p>
+                            </div>
+                        ) : (
+                            filteredGroups.map(group => (
+                                <button 
+                                    key={group.id}
+                                    onClick={() => setSelectedProduct(group)}
+                                    className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-3 active:bg-gray-50 text-left"
+                                >
+                                    <div className="w-12 h-12 bg-gray-50 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] text-gray-300 overflow-hidden">
+                                        {group.detail_image ? <img src={group.detail_image} alt={group.parentName} className="w-full h-full object-cover rounded-lg" /> : 'IMG'}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-[14px] font-bold text-gray-800 truncate">{group.parentName}</div>
+                                        <div className="text-[11px] text-gray-400 mt-0.5">{group.children.length}개 옵션</div>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                                </button>
+                            ))
+                        )}
                     </div>
                 </div>
             </main>
