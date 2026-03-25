@@ -34,10 +34,13 @@ function checkAll() {
 
   checkCafe24Token(dashboard);
   checkRedis(dashboard, snapshotData);
-  checkSyncProducts(dashboard, snapshotData);
   checkVercel(dashboard);
 
-  SpreadsheetApp.getUi().alert('✅ 모든 체크가 완료되었습니다.');
+  try {
+    SpreadsheetApp.getUi().alert('✅ 모든 체크가 완료되었습니다.');
+  } catch (e) {
+    // 트리거 실행 시 UI 없음 — 무시
+  }
 }
 
 function checkCafe24Token(sheet) {
@@ -95,21 +98,19 @@ function checkRedis(sheet, data) {
   }
 }
 
-function checkSyncProducts(sheet, data) {
-  try {
-    if (!data) throw new Error('debug-snapshot 데이터 없음');
-    const snapshot = data.lastSnapshot || {};
-    const productCount = Object.keys(snapshot).length;
-    const status = productCount > 0 ? '🟢정상' : '🔴오류';
-    updateDashboard(sheet, 6, '/api/sync-products', status, "스냅샷 상품수: " + productCount, '[재실행]');
-    logResult('Sync Products', status, "Snapshot count: " + productCount);
-  } catch (e) {
-    updateDashboard(sheet, 6, '/api/sync-products', '🔴오류', e.message);
-  }
-}
-
 function checkVercel(sheet) {
-  updateDashboard(sheet, 8, 'Vercel 배포', '🟢정상', 'N/A (Health Check)', '-');
+  try {
+    const response = UrlFetchApp.fetch(BASE_URL, { muteHttpExceptions: true });
+    const code = response.getResponseCode();
+    const status = code === 200 ? '🟢정상' : '🔴오류';
+    const detail = 'HTTP ' + code;
+    updateDashboard(sheet, 8, 'Vercel 배포', status, detail, '-');
+    logResult('Vercel 배포', status, detail);
+  } catch (e) {
+    updateDashboard(sheet, 8, 'Vercel 배포', '🔴오류', e.message, '-');
+    logResult('Vercel 배포', '🔴오류', e.message);
+    sendAlert('🚨 [웹카달로그] Vercel 응답 없음', e.message);
+  }
 }
 
 function updateDashboard(sheet, row, item, status, detail, action) {
@@ -228,18 +229,23 @@ function setConfigToSheet_(sheet, key, value) {
 
 function createTrigger() {
   // 기존 트리거 중복 방지
-  const triggers = ScriptApp.getProjectTriggers();
-  triggers.forEach(t => {
-    if (t.getHandlerFunction() === 'refreshCafe24Token') {
-      ScriptApp.deleteTrigger(t);
-    }
+  const targets = ['refreshCafe24Token', 'checkAll'];
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (targets.includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   });
 
-  // refreshCafe24Token 1시간마다 실행
+  // refreshCafe24Token 1시간마다 실행 (토큰 갱신 단일 주체)
   ScriptApp.newTrigger('refreshCafe24Token')
     .timeBased()
     .everyHours(1)
     .create();
 
+  // checkAll 6시간마다 실행 (대시보드 자동 갱신)
+  ScriptApp.newTrigger('checkAll')
+    .timeBased()
+    .everyHours(6)
+    .create();
+
   Logger.log('✅ refreshCafe24Token 트리거 등록 완료 (1시간 간격)');
+  Logger.log('✅ checkAll 트리거 등록 완료 (6시간 간격)');
 }
