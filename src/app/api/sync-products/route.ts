@@ -3,7 +3,6 @@ import { createClient } from 'redis';
 import apiClient from '@/lib/api-client';
 import { normalizeProductName, GroupedProduct, ChildItem } from '@/lib/product-utils';
 import { QUOTE_CATEGORY_NOS } from '@/config/quote-categories';
-import { getPriceMap } from '@/lib/price-map';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,17 +10,16 @@ export const revalidate = 0;
 const CATEGORY_NOS = QUOTE_CATEGORY_NOS;
 const SNAPSHOT_KEY = 'catalog:snapshot:v1';
 
-export async function GET() {
+async function buildSnapshot(): Promise<{ grouped: Record<string, GroupedProduct>; error?: never } | { error: string }> {
   try {
-    const priceMap = await getPriceMap();
     const allProducts: any[] = [];
 
     for (const catNo of CATEGORY_NOS) {
       const response = await apiClient.get('/products', {
         params: {
           category: catNo,
-          embed: 'options,variants', // [수정] options 추가 (option_value 접근에 필수)
-          display: 'T', // [수정] 진열중인 상품만 조회 (T=진열함, F=진열 안 함)
+          embed: 'options,variants',
+          display: 'T',
           limit: 100
         }
       });
@@ -35,14 +33,12 @@ export async function GET() {
       }
     }
 
-    // === STEP 3: children 구조 재구성 ===
     const grouped: Record<string, GroupedProduct> = {};
 
     for (const product of allProducts) {
       const parentCode = product.product_code;
       if (!parentCode) continue;
 
-      // 부모가 이미 등록된 경우 카테고리만 추가
       if (grouped[parentCode]) {
         const catNo = product._categoryNo || 0;
         if (!grouped[parentCode].categoryNo!.includes(catNo)) {
@@ -51,42 +47,36 @@ export async function GET() {
         continue;
       }
 
-      // 1. 부모 상품명: HTML 태그만 제거, 절삭 없음
       const parentName = normalizeProductName(product.product_name);
       const detail_image = product.detail_image || '';
 
       let children: ChildItem[] = [];
 
-      // 2. 자식 리스트 구성
       if (product.options?.has_option === 'T') {
-        // Case A: 옵션 상품 → option_value 기반 children 생성
+        // 옵션 상품 → additional_amount 직접 사용
         const optionsList = product.options?.options;
         const optionValues: any[] = optionsList?.[0]?.option_value || [];
         const variants: any[] = product.variants || [];
 
         children = optionValues.map((ov: any) => {
           const name = ov.value || ov.option_text || '';
-
-          // variants에서 해당 옵션값과 매핑하여 가격 계산
           const matchedVariant = variants.find((v: any) =>
             v.options?.some((o: any) => o.value === name)
           );
 
           const additionalAmount = Number(matchedVariant?.additional_amount || 0);
           const basePrice = Number(product.price || 0);
-          const customVariantCode = matchedVariant?.custom_variant_code || '';
-          const sheetPrice = priceMap?.[customVariantCode];
-          const price = sheetPrice !== undefined ? sheetPrice : basePrice + additionalAmount;
+          const price = basePrice + additionalAmount;
           const variantCode = matchedVariant?.variant_code || '';
 
           return { name, price, variantCode };
-        }).filter((child: ChildItem) => child.name); // 빈 값 제거
+        }).filter((child: ChildItem) => child.name);
 
       } else {
-        // Case B: 단일 상품 → 부모 자체를 1개 자식으로 반환
+        // 단일 상품 → price 직접 사용
         children = [{
           name: parentName,
-          price: priceMap?.[product.custom_product_code] ?? Number(product.price || 0),
+          price: Number(product.price || 0),
           isSingle: true
         }];
       }
@@ -100,21 +90,35 @@ export async function GET() {
       };
     }
 
-    // Redis 저장
-    const client = createClient({ url: process.env.KV_REDIS_URL });
-    await client.connect();
-    await client.set(SNAPSHOT_KEY, JSON.stringify(grouped));
-    await client.quit();
-
-    return NextResponse.json({
-      success: true,
-      products: Object.keys(grouped).length
-    });
-
-  } catch (error: any) {
-    return NextResponse.json({
-      success: false,
-      error: error.message
-    }, { status: 500 });
+    return { grouped };
+  } catch (err: any) {
+    return { error: err.message };
   }
+}
+
+async function saveToRedis(grouped: Record<string, GroupedProduct>) {
+  const client = createClient({ url: process.env.KV_REDIS_URL });
+  await client.connect();
+  await client.set(SNAPSHOT_KEY, JSON.stringify(grouped));
+  await client.quit();
+}
+
+// Vercel Cron 및 직접 GET 호출용
+export async function GET() {
+  const result = await buildSnapshot();
+  if ('error' in result) {
+    return NextResponse.json({ success: false, error: result.error }, { status: 500 });
+  }
+  await saveToRedis(result.grouped);
+  return NextResponse.json({ success: true, products: Object.keys(result.grouped).length });
+}
+
+// 관리자 페이지 "가격 즉시 동기화" 버튼용
+export async function POST() {
+  const result = await buildSnapshot();
+  if ('error' in result) {
+    return NextResponse.json({ success: false, error: result.error }, { status: 500 });
+  }
+  await saveToRedis(result.grouped);
+  return NextResponse.json({ success: true, products: Object.keys(result.grouped).length });
 }
