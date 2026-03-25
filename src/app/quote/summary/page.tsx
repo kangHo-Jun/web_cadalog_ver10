@@ -76,7 +76,7 @@ export default function QuoteSummaryPage() {
                         담당자가 확인 후 연락처로 안내해 드립니다.
                     </p>
                     <button
-                        onClick={() => router.push('/quote')}
+                        onClick={() => router.push('/')}
                         className="px-6 py-3 rounded-xl text-white font-semibold text-sm"
                         style={{ background: '#48BB78' }}
                     >

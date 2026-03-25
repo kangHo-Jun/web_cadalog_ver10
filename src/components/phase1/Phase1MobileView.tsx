@@ -237,14 +237,7 @@ export default function Phase1MobileView() {
                                 })}
                             </div>
 
-                            <div className="p-4 bg-gray-50 border-t border-gray-100">
-                                <button 
-                                    onClick={() => setSelectedProduct(null)}
-                                    className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl active:scale-95 transition-transform"
-                                >
-                                    설정 완료
-                                </button>
-                            </div>
+                            <div className="h-4" />
                         </motion.div>
                     </>
                 )}
