@@ -13,11 +13,12 @@ export async function GET() {
         // 1. 현재 가격 맵 (Sheet)
         const currentPrices = await getPriceMap();
 
-        // 2. 테스트 기간 분기 (~2025.03.31)
+        // 2. 테스트 기간 분기 (~2026.03.31)
         const now = new Date();
         const KST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const isTestPeriod = KST < new Date('2026-04-01T00:00:00+09:00');
-
+        
+        let targetCodesArray: string[] = [];
         let enhancedPrices: Record<string, any> = {};
 
         if (isTestPeriod && client) {
@@ -40,7 +41,7 @@ export async function GET() {
                 }
             });
 
-            const targetCodesArray = Array.from(targetCodes);
+            targetCodesArray = Array.from(targetCodes);
 
             // 데이터 주입
             enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
