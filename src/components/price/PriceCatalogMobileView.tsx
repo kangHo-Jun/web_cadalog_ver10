@@ -16,6 +16,10 @@ interface EnhancedPrice {
   changeRate: number | null;
 }
 
+interface FlattenedPriceItem extends ChildItem {
+  parentName: string;
+}
+
 /* ── 가격 변동 표시 컴포넌트 ── */
 const PriceTrend = ({ info }: { info: EnhancedPrice | undefined }) => {
   if (!info || info.changeDirection === 'none' || info.changeAmount === null) {
@@ -42,17 +46,20 @@ const PriceTrend = ({ info }: { info: EnhancedPrice | undefined }) => {
 };
 
 /* ── 상품 리스트 행 ── */
-const MobilePriceItem = memo(({ item, priceInfo }: { item: ChildItem; priceInfo: EnhancedPrice | undefined }) => {
+const MobilePriceItem = memo(({ item, parentName, priceInfo }: { item: ChildItem; parentName: string; priceInfo: EnhancedPrice | undefined }) => {
   const supplyPrice = item.price ? toSupplyPrice(item.price) : 0;
+  const isSingle = item.isSingle;
 
   return (
     <div className="bg-white px-4 py-4 border-b border-gray-100 active:bg-gray-50 transition-colors">
       <div className="flex justify-between items-start gap-2">
         <div className="flex-1 min-w-0">
           <h4 className="text-[14px] font-bold text-gray-900 leading-tight mb-1">
-            {item.name}
+            {parentName}
           </h4>
-          <p className="text-[11px] text-gray-400 font-medium">규격: {item.variantCode || '-'}</p>
+          {!isSingle && (
+            <p className="text-[12px] text-gray-500 font-medium">규격: {item.name}</p>
+          )}
         </div>
         <div className="flex flex-col items-end flex-shrink-0">
           <span className="text-[15px] font-extrabold text-gray-900">
@@ -91,7 +98,7 @@ export default function PriceCatalogMobileView() {
     
     // 전체 상품 리스트 (평탄화)
     const allGroups: GroupedProduct[] = Object.values(snapshotData.lastSnapshot);
-    const flattened: ChildItem[] = [];
+    const flattened: FlattenedPriceItem[] = [];
     
     allGroups.forEach(group => {
       // 카테고리 필터
@@ -104,7 +111,7 @@ export default function PriceCatalogMobileView() {
         
         flattened.push({
           ...child,
-          name: group.children.length === 1 && child.isSingle ? group.parentName : `${group.parentName} - ${child.name}`
+          parentName: group.parentName
         });
       });
     });
@@ -116,8 +123,14 @@ export default function PriceCatalogMobileView() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* ── 상단 헤더 ── */}
       <header className="sticky top-0 z-50 flex flex-col shadow-md" style={{ background: '#1e3a5f' }}>
-        <div className="h-14 flex items-center px-4">
-          <h1 className="text-white font-bold text-lg">실시간 가격정보</h1>
+        <div className="h-14 flex items-center justify-between px-4">
+          <a href="https://daesan.ai" target="_blank" rel="noopener noreferrer">
+            <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
+              DAESAN
+            </span>
+          </a>
+          <h1 className="text-white/80 font-bold text-sm">실시간 가격정보</h1>
+          <div className="w-10"></div> {/* 벨런스용 공간 */}
         </div>
 
         {/* 검색 입력 */}
@@ -191,10 +204,11 @@ export default function PriceCatalogMobileView() {
                 총 {filteredItems.length}개 품목
               </span>
             </div>
-            {filteredItems.map((item, idx) => (
+            {filteredItems.map((item: any, idx) => (
               <MobilePriceItem
                 key={`${item.variantCode}-${idx}`}
                 item={item}
+                parentName={item.parentName}
                 priceInfo={priceData?.[item.variantCode || '']}
               />
             ))}
