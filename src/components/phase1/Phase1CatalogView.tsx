@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
 import StickySearchHeader from './StickySearchHeader';
@@ -11,7 +11,11 @@ import { useCartStore } from '@/store/useCartStore';
 import { log, trackMetric } from '@/lib/logger';
 import { GroupedProduct } from '@/lib/product-utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import { 
+    Search,
+    Trash2
+} from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const fetcher = (url: string) =>
     fetch(url).then((res) => {
@@ -77,6 +81,18 @@ export default function Phase1CatalogView() {
         trackMetric('category_switch_trigger', performance.now() - start);
     };
 
+    const handleReset = useCallback(() => {
+        if (window.confirm('장바구니를 비우고 처음부터 시작하시겠습니까?')) {
+            clearCart();
+            setSearch('');
+            setSelectedCategory(null);
+            toast.success('초기화되었습니다', {
+                icon: '🗑️',
+                position: 'bottom-center'
+            });
+        }
+    }, [clearCart]);
+
     return (
         <div className="flex flex-col">
             {/* Sticky header */}
@@ -84,6 +100,7 @@ export default function Phase1CatalogView() {
                 search={search}
                 onSearchChange={setSearch}
                 onCartClick={() => setDrawerOpen(true)}
+                onReset={handleReset}
             />
 
             {/* Cart Drawer */}

@@ -1,19 +1,21 @@
 'use client';
 
 import React, { useRef } from 'react';
-import { Search, ShoppingCart } from 'lucide-react';
+import { Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
 
 interface StickySearchHeaderProps {
     search: string;
     onSearchChange: (value: string) => void;
     onCartClick?: () => void;
+    onReset: () => void;
 }
 
 export default function StickySearchHeader({
     search,
     onSearchChange,
     onCartClick,
+    onReset,
 }: StickySearchHeaderProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const totalItems = useCartStore((s) => s.totalItems());
@@ -53,12 +55,21 @@ export default function StickySearchHeader({
                 )}
             </div>
 
-            {/* 장바구니 — 클릭 시 드로어 오픈 */}
-            <button
-                id="cart-button"
-                onClick={onCartClick}
-                className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold whitespace-nowrap transition-all hover:bg-white/10"
-            >
+            <div className="flex items-center gap-1">
+                <button
+                    onClick={onReset}
+                    className="p-2 text-white/70 hover:text-white active:scale-95 transition-all"
+                    title="장바구니 초기화"
+                >
+                    <Trash2 className="w-5 h-5" />
+                </button>
+
+                {/* 장바구니 — 클릭 시 드로어 오픈 */}
+                <button
+                    id="cart-button"
+                    onClick={onCartClick}
+                    className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold whitespace-nowrap transition-all hover:bg-white/10"
+                >
                 <ShoppingCart className="w-4 h-4" />
                 장바구니
                 {totalItems > 0 && (
@@ -70,6 +81,7 @@ export default function StickySearchHeader({
                     </span>
                 )}
             </button>
-        </header>
-    );
+        </div>
+    </header>
+);
 }
