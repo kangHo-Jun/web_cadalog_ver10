@@ -269,8 +269,21 @@ function createTrigger() {
     }
     ScriptApp.newTrigger('autoRefreshCafe24Token').timeBased().everyHours(1).create();
     ScriptApp.newTrigger('buildCafe24Cache').timeBased().everyHours(1).create();
-    ScriptApp.newTrigger('syncPrices').timeBased().everyHours(1).create();
-    Logger.log('✅ autoRefreshCafe24Token / buildCafe24Cache / syncPrices — 각 1시간마다 트리거 생성 완료');
+    // syncPrices는 고정 트리거 없음 — buildCafe24Cache 완료 후 10분 딜레이 one-time 트리거로 실행
+    Logger.log('✅ autoRefreshCafe24Token / buildCafe24Cache — 각 1시간마다 트리거 생성 완료 (syncPrices는 buildCafe24Cache 완료 후 자동 예약)');
+}
+
+/**
+ * syncPrices one-time 트리거 예약 (10분 후).
+ * 기존 대기 중인 syncPrices one-time 트리거가 있으면 먼저 삭제 후 재등록.
+ */
+function scheduleSyncPricesOnce_() {
+    // 기존 syncPrices 트리거(one-time 포함) 모두 제거
+    for (const t of ScriptApp.getProjectTriggers()) {
+        if (t.getHandlerFunction() === 'syncPrices') ScriptApp.deleteTrigger(t);
+    }
+    ScriptApp.newTrigger('syncPrices').timeBased().after(10 * 60 * 1000).create();
+    Logger.log('[scheduleSyncPricesOnce_] syncPrices 10분 후 one-time 트리거 등록 완료');
 }
 
 
@@ -733,6 +746,9 @@ function initCafe24Cache() {
 
     setCafe24CacheState_(true, 0);
     Logger.log(`[initCafe24Cache] ✅ 완료 — 저장 ${totalSaved}건 / 전체 variants ${totalVariants}건 / 미설정 제외 ${totalVariants - totalSaved}건`);
+
+    // syncPrices one-time 트리거 예약 (10분 후)
+    scheduleSyncPricesOnce_();
 }
 
 /**
@@ -829,6 +845,9 @@ function buildCafe24Cache() {
     }
 
     Logger.log(`[buildCafe24Cache] ✅ 증분 완료 — 신규 추가 ${toAdd.length}건 / 삭제 ${toRemove.size}건 / 기존 ${existingMap.size}건`);
+
+    // syncPrices one-time 트리거 예약 (10분 후)
+    scheduleSyncPricesOnce_();
 }
 
 /** 카페24 상품 목록 페이지 조회 (판매함만) */
