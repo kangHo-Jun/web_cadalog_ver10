@@ -156,9 +156,9 @@ function syncPrices() {
             }
 
             const priceWithVat = Math.round(ecPrice * 1.1);
-            const entry = cafe24Cache[customCode];
+            const cacheEntries = cafe24Cache[customCode];
 
-            if (!entry) {
+            if (!cacheEntries || cacheEntries.length === 0) {
                 Logger.log(`미매핑: ${customCode} (카페24 캐시에 없음)`);
                 newMappingRows.push([customCode, '', '', priceWithVat, now(), '미매핑']);
                 const desc = (ecDescriptions && ecDescriptions[customCode]) ? ecDescriptions[customCode] : '';
@@ -167,60 +167,61 @@ function syncPrices() {
                 continue;
             }
 
-            const { productNo, variantCode, cachedPrice } = entry;
+            // 동일 custom_variant_code에 묶인 모든 variant 처리
+            for (const { productNo, variantCode, cachedPrice } of cacheEntries) {
+                // additional_amount vs ecount_price_vat 비교
+                if (Math.round(cachedPrice) === priceWithVat) {
+                    newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), '스킵(변동없음)']);
+                    skipped++;
+                    continue;
+                }
 
-            // additional_amount vs ecount_price_vat 비교
-            if (Math.round(cachedPrice) === priceWithVat) {
-                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), '스킵(변동없음)']);
-                skipped++;
-                continue;
-            }
+                Logger.log(`변동: ${customCode} | variant=${variantCode} | additional_amount=${cachedPrice} → ecount_vat=${priceWithVat}`);
+                logs.push(`[${now()}] 변동: ${customCode} | variant=${variantCode} | ${cachedPrice} → ${priceWithVat}`);
 
-            Logger.log(`변동: ${customCode} | additional_amount=${cachedPrice} → ecount_vat=${priceWithVat}`);
-            logs.push(`[${now()}] 변동: ${customCode} | ${cachedPrice} → ${priceWithVat}`);
+                if (G_CFG[KEY.DRY_RUN] === 'true') {
+                    newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), 'DRY_RUN']);
+                    updated++;
+                    continue;
+                }
 
-            if (G_CFG[KEY.DRY_RUN] === 'true') {
-                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), 'DRY_RUN']);
-                updated++;
-                continue;
-            }
+                // 단품(variant 없음) → product price 직접 업데이트
+                if (!variantCode) {
+                    const pRes = updateProductPriceDirect(mallId, apiVer, productNo, priceWithVat);
+                    if (pRes.ok) {
+                        Logger.log(`단품 업데이트 성공: ${customCode} | product_no=${productNo} | ${cachedPrice} → ${priceWithVat} (${pRes.status})`);
+                        logs.push(`  └ 성공(단품) (${pRes.status}): ${customCode}`);
+                        newMappingRows.push([customCode, productNo, '', priceWithVat, now(), '성공(단품)']);
+                        updated++;
+                    } else {
+                        Logger.log(`단품 업데이트 실패: ${customCode} | status=${pRes.status}`);
+                        logs.push(`  └ 실패(단품) (${pRes.status}): ${customCode}`);
+                        newMappingRows.push([customCode, productNo, '', priceWithVat, now(), `실패(단품)(${pRes.status})`]);
+                        errors++;
+                    }
+                    Utilities.sleep(DELAY_MS);
+                    continue;
+                }
 
-            // 단품(variant 없음) → product price 직접 업데이트
-            if (!variantCode) {
-                const pRes = updateProductPriceDirect(mallId, apiVer, productNo, priceWithVat);
-                if (pRes.ok) {
-                    Logger.log(`단품 업데이트 성공: ${customCode} | product_no=${productNo} | ${cachedPrice} → ${priceWithVat} (${pRes.status})`);
-                    logs.push(`  └ 성공(단품) (${pRes.status}): ${customCode}`);
-                    newMappingRows.push([customCode, productNo, '', priceWithVat, now(), '성공(단품)']);
+                // 카페24 직접 PUT (product_no + variant_code 사용)
+                const url = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants/${variantCode}`;
+                const payload = { shop_no: 1, request: { additional_amount: String(priceWithVat) } };
+                const res = c24Put(url, apiVer, payload);
+
+                if (res.ok) {
+                    Logger.log(`업데이트 성공: ${customCode} | product_no=${productNo} | variant=${variantCode} | ${cachedPrice} → ${priceWithVat} (${res.status})`);
+                    logs.push(`  └ 성공 (${res.status}): ${customCode} | variant=${variantCode}`);
+                    newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), '성공']);
                     updated++;
                 } else {
-                    Logger.log(`단품 업데이트 실패: ${customCode} | status=${pRes.status}`);
-                    logs.push(`  └ 실패(단품) (${pRes.status}): ${customCode}`);
-                    newMappingRows.push([customCode, productNo, '', priceWithVat, now(), `실패(단품)(${pRes.status})`]);
+                    Logger.log(`업데이트 실패: ${customCode} | variant=${variantCode} | status=${res.status} | ${res.body.substring(0, 80)}`);
+                    logs.push(`  └ 실패 (${res.status}): ${customCode} | variant=${variantCode}`);
+                    newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), `실패(${res.status})`]);
                     errors++;
                 }
+
                 Utilities.sleep(DELAY_MS);
-                continue;
             }
-
-            // 카페24 직접 PUT (product_no + variant_code 사용)
-            const url = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants/${variantCode}`;
-            const payload = { shop_no: 1, request: { additional_amount: String(priceWithVat) } };
-            const res = c24Put(url, apiVer, payload);
-
-            if (res.ok) {
-                Logger.log(`업데이트 성공: ${customCode} | product_no=${productNo} | variant=${variantCode} | ${cachedPrice} → ${priceWithVat} (${res.status})`);
-                logs.push(`  └ 성공 (${res.status}): ${customCode}`);
-                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), '성공']);
-                updated++;
-            } else {
-                Logger.log(`업데이트 실패: ${customCode} | status=${res.status} | ${res.body.substring(0, 80)}`);
-                logs.push(`  └ 실패 (${res.status}): ${customCode}`);
-                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), `실패(${res.status})`]);
-                errors++;
-            }
-
-            Utilities.sleep(DELAY_MS);
         }
 
         clearSyncProgress_();
@@ -573,7 +574,10 @@ function setCafe24CacheState_(done, nextOffset) {
     }
 }
 
-/** 카페24상품 시트에서 캐시 로드 */
+/** 카페24상품 시트에서 캐시 로드
+ * 동일 custom_variant_code에 여러 variant가 있을 수 있으므로 배열로 저장
+ * @returns {{ [customCode]: Array<{productNo, variantCode, cachedPrice}> }}
+ */
 function readCafe24SheetCache(ss) {
     const sh = ss.getSheetByName('카페24상품');
     const cache = {};
@@ -586,7 +590,8 @@ function readCafe24SheetCache(ss) {
         const variantCode = String(data[i][4] || '').trim();
         const price = parseFloat(String(data[i][5] || '0').replace(/,/g, '')) || 0;
         if (customCode && productNo && variantCode) {
-            cache[customCode] = { productNo, variantCode, cachedPrice: price };
+            if (!cache[customCode]) cache[customCode] = [];
+            cache[customCode].push({ productNo, variantCode, cachedPrice: price });
         }
     }
     return cache;
