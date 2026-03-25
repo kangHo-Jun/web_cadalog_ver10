@@ -48,8 +48,15 @@ export async function GET() {
             // 데이터 주입
             enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
                 const trimmedKey = code.trim();
-                // 키가 이름이거나 코드일 수 있으므로 targetMatches에서 확인
-                const isTarget = targetMatches.has(trimmedKey);
+                // 1. 완전 일치 확인
+                let isTarget = targetMatches.has(trimmedKey);
+                
+                // 2. 부분 일치 확인 (이름 형식이 다를 수 있음)
+                if (!isTarget) {
+                    isTarget = targetMatchesArray.some(match => 
+                        trimmedKey.includes(match) || match.includes(trimmedKey)
+                    );
+                }
                 
                 if (isTarget) {
                     // 순환 인덱스 생성을 위해 해시값이나 다른 수단 사용 (여기서는 키의 문자열 합 활용)
@@ -128,7 +135,15 @@ export async function GET() {
             }, {} as any);
         }
 
-        return NextResponse.json(enhancedPrices, {
+        return NextResponse.json({
+            ...enhancedPrices,
+            _debug: isTestPeriod ? {
+                isTestPeriod,
+                targetMatchesCount: targetMatchesArray.length,
+                sampleMatches: targetMatchesArray.slice(0, 10),
+                sampleCurrent: Object.keys(currentPrices).slice(0, 10),
+            } : undefined
+        }, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0, must-revalidate',
                 'Pragma': 'no-cache',
