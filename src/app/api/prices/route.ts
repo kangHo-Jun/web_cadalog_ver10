@@ -18,7 +18,7 @@ export async function GET() {
         const KST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const isTestPeriod = KST < new Date('2026-04-01T00:00:00+09:00');
         
-        let targetCodesArray: string[] = [];
+        let targetMatchesArray: string[] = [];
         let enhancedPrices: Record<string, any> = {};
 
         if (isTestPeriod && client) {
@@ -137,8 +137,8 @@ export async function GET() {
 
         return NextResponse.json({
             ...enhancedPrices,
+            _is_test_period: isTestPeriod,
             _debug: isTestPeriod ? {
-                isTestPeriod,
                 targetMatchesCount: targetMatchesArray.length,
                 sampleMatches: targetMatchesArray.slice(0, 10),
                 sampleCurrent: Object.keys(currentPrices).slice(0, 10),
