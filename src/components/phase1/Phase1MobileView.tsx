@@ -10,7 +10,8 @@ import {
     Minus, 
     X, 
     CheckCircle2,
-    Search
+    Search,
+    Trash2
 } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
 import { GroupedProduct, ChildItem } from '@/lib/product-utils';
@@ -26,20 +27,30 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 /**
  * Mobile Header
  */
-const MobileHeader = ({ cartCount, onCartClick }: { cartCount: number; onCartClick: () => void }) => (
+const MobileHeader = ({ cartCount, onCartClick, onReset }: { cartCount: number; onCartClick: () => void; onReset: () => void }) => (
     <header className="fixed top-0 left-0 right-0 h-14 bg-[#123628] flex items-center justify-between px-4 z-50 shadow-md">
-        <h1 className="text-white text-lg font-bold tracking-tight">Daesan</h1>
-        <button 
-            onClick={onCartClick}
-            className="relative p-2 text-white/90 active:scale-90 transition-transform"
-        >
-            <ShoppingCart className="w-6 h-6" />
-            {cartCount > 0 && (
-                <span className="absolute top-0 right-0 bg-[#48BB78] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                    {cartCount}
-                </span>
-            )}
-        </button>
+        <a href="https://daesan.ai" target="_self" className="flex items-center">
+            <h1 className="text-white text-lg font-bold tracking-tight">Daesan</h1>
+        </a>
+        <div className="flex items-center gap-1">
+            <button 
+                onClick={onReset}
+                className="p-2 text-white/70 active:scale-90 transition-transform"
+            >
+                <Trash2 className="w-5 h-5" />
+            </button>
+            <button 
+                onClick={onCartClick}
+                className="relative p-2 text-white/90 active:scale-90 transition-transform"
+            >
+                <ShoppingCart className="w-6 h-6" />
+                {cartCount > 0 && (
+                    <span className="absolute top-0 right-0 bg-[#48BB78] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                        {cartCount}
+                    </span>
+                )}
+            </button>
+        </div>
     </header>
 );
 
@@ -76,9 +87,24 @@ export default function Phase1MobileView() {
     // Cart Store
     const totalItems = useCartStore((s) => s.totalItems());
     const addToCart = useCartStore((s) => s.addToCart);
+    const clearCart = useCartStore((s) => s.clearCart);
 
     // Data Fetching
     const { data, isLoading } = useSWR('/api/debug-snapshot', fetcher);
+
+    // Handle Reset
+    const handleReset = useCallback(() => {
+        if (window.confirm("장바구니를 비우고 처음부터 시작하시겠습니까?")) {
+            clearCart();
+            setSearchTerm('');
+            setSelectedCategory(null);
+            setSelectedProduct(null);
+            toast.success("초기화되었습니다", {
+                icon: '🗑️',
+                position: 'bottom-center'
+            });
+        }
+    }, [clearCart]);
 
     // Grouping
     const allGroups = useMemo((): GroupedProduct[] => {
@@ -136,7 +162,11 @@ export default function Phase1MobileView() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col pb-24 font-sans text-gray-900 overflow-x-hidden pt-14">
-            <MobileHeader cartCount={totalItems} onCartClick={() => router.push('/quote/summary')} />
+            <MobileHeader 
+                cartCount={totalItems} 
+                onCartClick={() => router.push('/quote/summary')} 
+                onReset={handleReset}
+            />
             
             <main className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch]">
                 <div className="flex flex-col h-full">
