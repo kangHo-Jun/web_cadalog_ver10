@@ -1,18 +1,15 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import useSWR from 'swr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ShoppingCart, 
-    ChevronDown, 
     ChevronRight, 
     Plus, 
     Minus, 
     X, 
-    CheckCircle2,
-    LayoutList,
-    Layers
+    CheckCircle2
 } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
 import { GroupedProduct, ChildItem } from '@/lib/product-utils';
@@ -46,32 +43,6 @@ const MobileHeader = ({ cartCount, onCartClick }: { cartCount: number; onCartCli
 );
 
 /**
- * Pattern Toggle
- */
-const PatternToggle = ({ pattern, setPattern }: { pattern: 'accordion' | 'bottomSheet'; setPattern: (p: 'accordion' | 'bottomSheet') => void }) => (
-    <div className="sticky top-14 bg-white border-b border-gray-100 z-40 p-2 flex gap-2">
-        <button
-            onClick={() => setPattern('accordion')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${
-                pattern === 'accordion' ? 'bg-[#123628] text-white shadow-sm' : 'bg-gray-50 text-gray-400'
-            }`}
-        >
-            <LayoutList className="w-4 h-4" />
-            아코디언
-        </button>
-        <button
-            onClick={() => setPattern('bottomSheet')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${
-                pattern === 'bottomSheet' ? 'bg-[#123628] text-white shadow-sm' : 'bg-gray-50 text-gray-400'
-            }`}
-        >
-            <Layers className="w-4 h-4" />
-            바텀시트
-        </button>
-    </div>
-);
-
-/**
  * Counter Component
  */
 const QuantityCounter = ({ quantity, setQuantity }: { quantity: number; setQuantity: (q: number) => void }) => (
@@ -96,15 +67,11 @@ const QuantityCounter = ({ quantity, setQuantity }: { quantity: number; setQuant
 
 export default function Phase1MobileView() {
     const router = useRouter();
-    const [pattern, setPattern] = useState<'accordion' | 'bottomSheet'>('accordion');
     const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-    const [expandedCategories, setExpandedCategories] = useState<number[]>([]);
-    const [expandedProducts, setExpandedProducts] = useState<string[]>([]);
     const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
     const [bsQuantities, setBsQuantities] = useState<Record<string, number>>({});
 
     // Cart Store
-    const cartItems = useCartStore((s) => s.items);
     const totalItems = useCartStore((s) => s.totalItems());
     const addToCart = useCartStore((s) => s.addToCart);
 
@@ -140,20 +107,7 @@ export default function Phase1MobileView() {
         });
     }, [addToCart]);
 
-    // Toggle logic for Accordion
-    const toggleCategory = (no: number) => {
-        setExpandedCategories(prev => 
-            prev.includes(no) ? prev.filter(n => n !== no) : [...prev, no]
-        );
-    };
-
-    const toggleProduct = (id: string) => {
-        setExpandedProducts(prev => 
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
-    };
-
-    // Filtered Groups for Pattern B
+    // Filtered Groups
     const filteredGroups = useMemo(() => {
         if (!selectedCategory) return allGroups;
         return allGroups.filter(g => g.categoryNo?.includes(selectedCategory));
@@ -173,137 +127,54 @@ export default function Phase1MobileView() {
         <div className="min-h-screen bg-gray-50 flex flex-col pb-24 font-sans text-gray-900 overflow-x-hidden pt-14">
             <MobileHeader cartCount={totalItems} onCartClick={() => router.push('/quote/summary')} />
             
-            <PatternToggle pattern={pattern} setPattern={setPattern} />
-
             <main className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch]">
-                {pattern === 'accordion' ? (
-                    // --- Pattern A: Accordion ---
-                    <div className="p-3 space-y-3">
-                        {QUOTE_CATEGORIES.map(cat => {
-                            const isExpanded = expandedCategories.includes(cat.category_no);
-                            const catGroups = allGroups.filter(g => g.categoryNo?.includes(cat.category_no));
-                            if (catGroups.length === 0) return null;
-
-                            return (
-                                <div key={cat.category_no} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-                                    <button 
-                                        onClick={() => toggleCategory(cat.category_no)}
-                                        className="w-full px-4 py-4 flex items-center justify-between active:bg-gray-50 transition-colors"
-                                    >
-                                        <span className="font-bold text-gray-800">{cat.display_name}</span>
-                                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    
-                                    <AnimatePresence>
-                                        {isExpanded && (
-                                            <motion.div
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: 'auto', opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                transition={{ duration: 0.2 }}
-                                                className="overflow-hidden border-t border-gray-50"
-                                            >
-                                                {catGroups.map(group => {
-                                                    const isProdExpanded = expandedProducts.includes(group.id);
-                                                    return (
-                                                        <div key={group.id} className="border-b border-gray-50 last:border-0">
-                                                            <button 
-                                                                onClick={() => toggleProduct(group.id)}
-                                                                className="w-full px-4 py-3 flex items-center gap-3 active:bg-gray-50"
-                                                            >
-                                                                <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center text-[8px] text-gray-400">
-                                                                    {group.detail_image ? <img src={group.detail_image} className="w-full h-full object-cover rounded" /> : 'IMG'}
-                                                                </div>
-                                                                <span className="flex-1 text-left text-sm font-medium text-gray-700 truncate">{group.parentName}</span>
-                                                                <ChevronRight className={`w-4 h-4 text-gray-300 transition-transform ${isProdExpanded ? 'rotate-90' : ''}`} />
-                                                            </button>
-                                                            
-                                                            <AnimatePresence>
-                                                                {isProdExpanded && (
-                                                                    <motion.div
-                                                                        initial={{ height: 0 }}
-                                                                        animate={{ height: 'auto' }}
-                                                                        exit={{ height: 0 }}
-                                                                        transition={{ duration: 0.2 }}
-                                                                        className="overflow-hidden bg-gray-50 px-4 pb-3 space-y-2"
-                                                                    >
-                                                                        {group.children.map((child, idx) => (
-                                                                            <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
-                                                                                <div className="flex-1 min-w-0 pr-2">
-                                                                                    <div className="text-[13px] font-bold text-gray-800 truncate">{child.name}</div>
-                                                                                    <div className="text-[11px] text-blue-600 font-bold mt-0.5">{formatSupplyPrice(child.price)} <span className="text-[9px] text-gray-400">(VAT 별도)</span></div>
-                                                                                </div>
-                                                                                <button 
-                                                                                    onClick={() => handleAddToCart(group.parentName, child, 1)}
-                                                                                    className="px-4 py-1.5 bg-[#48BB78] text-white text-[12px] font-bold rounded-lg active:scale-95 transition-transform"
-                                                                                >
-                                                                                    담기
-                                                                                </button>
-                                                                            </div>
-                                                                        ))}
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    // --- Pattern B: Bottom Sheet ---
-                    <div className="flex flex-col h-full">
-                        {/* Category Chips */}
-                        <div className="bg-white border-b border-gray-100 px-3 py-3 flex gap-2 overflow-x-auto no-scrollbar">
+                <div className="flex flex-col h-full">
+                    {/* Category Chips - Sticky below Header */}
+                    <div className="sticky top-0 bg-white border-b border-gray-100 px-3 py-3 flex gap-2 overflow-x-auto no-scrollbar z-40 shadow-sm">
+                        <button
+                            onClick={() => setSelectedCategory(null)}
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                                selectedCategory === null ? 'bg-[#48BB78] text-white' : 'bg-gray-100 text-gray-500'
+                            }`}
+                        >
+                            전체
+                        </button>
+                        {QUOTE_CATEGORIES.map(cat => (
                             <button
-                                onClick={() => setSelectedCategory(null)}
+                                key={cat.category_no}
+                                onClick={() => setSelectedCategory(cat.category_no)}
                                 className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-                                    selectedCategory === null ? 'bg-[#48BB78] text-white' : 'bg-gray-100 text-gray-500'
+                                    selectedCategory === cat.category_no ? 'bg-[#48BB78] text-white' : 'bg-gray-100 text-gray-500'
                                 }`}
                             >
-                                전체
+                                {cat.display_name}
                             </button>
-                            {QUOTE_CATEGORIES.map(cat => (
-                                <button
-                                    key={cat.category_no}
-                                    onClick={() => setSelectedCategory(cat.category_no)}
-                                    className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-                                        selectedCategory === cat.category_no ? 'bg-[#48BB78] text-white' : 'bg-gray-100 text-gray-500'
-                                    }`}
-                                >
-                                    {cat.display_name}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Product List */}
-                        <div className="p-3 grid grid-cols-1 gap-2">
-                            {filteredGroups.map(group => (
-                                <button 
-                                    key={group.id}
-                                    onClick={() => setSelectedProduct(group)}
-                                    className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-3 active:bg-gray-50 text-left"
-                                >
-                                    <div className="w-12 h-12 bg-gray-50 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] text-gray-300">
-                                        {group.detail_image ? <img src={group.detail_image} className="w-full h-full object-cover rounded-lg" /> : 'IMG'}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-[14px] font-bold text-gray-800 truncate">{group.parentName}</div>
-                                        <div className="text-[11px] text-gray-400 mt-0.5">{group.children.length}개 옵션</div>
-                                    </div>
-                                    <ChevronRight className="w-4 h-4 text-gray-300" />
-                                </button>
-                            ))}
-                        </div>
+                        ))}
                     </div>
-                )}
+
+                    {/* Product List */}
+                    <div className="p-3 grid grid-cols-1 gap-2">
+                        {filteredGroups.map(group => (
+                            <button 
+                                key={group.id}
+                                onClick={() => setSelectedProduct(group)}
+                                className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center gap-3 active:bg-gray-50 text-left"
+                            >
+                                <div className="w-12 h-12 bg-gray-50 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] text-gray-300">
+                                    {group.detail_image ? <img src={group.detail_image} alt={group.parentName} className="w-full h-full object-cover rounded-lg" /> : 'IMG'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-[14px] font-bold text-gray-800 truncate">{group.parentName}</div>
+                                    <div className="text-[11px] text-gray-400 mt-0.5">{group.children.length}개 옵션</div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-gray-300" />
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </main>
 
-            {/* Bottom Sheet for Pattern B */}
+            {/* Bottom Sheet Overlay */}
             <AnimatePresence>
                 {selectedProduct && (
                     <>
@@ -353,7 +224,6 @@ export default function Phase1MobileView() {
                                                 <button 
                                                     onClick={() => {
                                                         handleAddToCart(selectedProduct.parentName, child, qty);
-                                                        // Optional: auto close sheet or show animation
                                                     }}
                                                     className="px-6 py-2 bg-[#123628] text-white text-xs font-bold rounded-lg shadow-sm active:scale-95 transition-all"
                                                 >
@@ -378,7 +248,7 @@ export default function Phase1MobileView() {
                 )}
             </AnimatePresence>
 
-            {/* Bottom Navigation / Request Quote Button */}
+            {/* Bottom Sticky Button */}
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-50">
                 <button
                     disabled={totalItems === 0}
