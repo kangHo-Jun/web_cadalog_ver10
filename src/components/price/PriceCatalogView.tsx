@@ -6,7 +6,15 @@ import Link from 'next/link';
 import { Search, ChevronRight } from 'lucide-react';
 import FixedSidebar from '@/components/phase1/FixedSidebar';
 import { GroupedProduct, ChildItem } from '@/lib/product-utils';
-import { formatSupplyPrice } from '@/lib/price-utils';
+import { formatSupplyPrice, toSupplyPrice } from '@/lib/price-utils';
+
+interface EnhancedPrice {
+    price: number;
+    prevPrice: number | null;
+    changeAmount: number | null;
+    changeDirection: 'up' | 'down' | 'same' | 'none';
+    changeRate: number | null;
+}
 
 const fetcher = (url: string) =>
     fetch(url).then((res) => {
@@ -23,13 +31,37 @@ function useDebounce(value: string, ms = 200) {
     return debounced;
 }
 
+/* ── 가격 변동 표시 ── */
+const PriceTrend = memo(({ info }: { info: EnhancedPrice | undefined }) => {
+    if (!info || info.changeDirection === 'none' || info.changeAmount === null) {
+        return null;
+    }
+    if (info.changeDirection === 'same') {
+        return <span className="text-[10px] text-gray-400">—</span>;
+    }
+
+    const isUp = info.changeDirection === 'up';
+    const supplyChange = toSupplyPrice(Math.abs(info.changeAmount));
+
+    return (
+        <div className={`flex items-center gap-1 text-[11px] font-bold ${isUp ? 'text-[#e53e3e]' : 'text-[#3182ce]'}`}>
+            <span>{isUp ? '▲' : '▼'}</span>
+            <span>{supplyChange.toLocaleString('ko-KR')}</span>
+            <span className="opacity-80 ml-0.5">
+                ({isUp ? '+' : '-'}{info.changeRate?.toFixed(1)}%)
+            </span>
+        </div>
+    );
+});
+PriceTrend.displayName = 'PriceTrend';
+
 /* ── 가격 전용 자녀 행 (장바구니 없음) ── */
-const PriceChildRow = memo(({ child }: { child: ChildItem }) => {
+const PriceChildRow = memo(({ child, priceInfo }: { child: ChildItem; priceInfo: EnhancedPrice | undefined }) => {
     const formattedPrice =
         child.price && child.price > 0 ? formatSupplyPrice(child.price) : '가격문의';
 
     return (
-        <div className="grid grid-cols-[1fr_120px] items-center gap-3 px-4 py-3 border-t border-gray-100 hover:bg-gray-50/60 transition-colors">
+        <div className="grid grid-cols-[1fr_160px] items-center gap-3 px-4 py-3 border-t border-gray-100 hover:bg-gray-50/60 transition-colors">
             <span className="text-[13px] font-medium text-gray-800 truncate">
                 {child.name}
             </span>
@@ -43,6 +75,7 @@ const PriceChildRow = memo(({ child }: { child: ChildItem }) => {
                 >
                     {formattedPrice}
                 </span>
+                <PriceTrend info={priceInfo} />
                 <span className="text-[9px] text-gray-400 font-medium leading-none mt-0.5">
                     (VAT 별도)
                 </span>
@@ -58,13 +91,19 @@ const PriceProductCard = memo(
         group,
         isExpanded,
         onToggle,
+        priceData,
     }: {
         group: GroupedProduct;
         isExpanded: boolean;
         onToggle: () => void;
+        priceData: Record<string, EnhancedPrice> | null;
     }) => {
         const isSingleProduct =
             group.children.length === 1 && group.children[0].isSingle;
+
+        const singlePriceInfo = isSingleProduct
+            ? priceData?.[group.children[0].variantCode || '']
+            : undefined;
 
         return (
             <div
@@ -108,7 +147,7 @@ const PriceProductCard = memo(
                         </p>
                     </div>
 
-                    {/* 단일 상품: 가격 바로 표시 */}
+                    {/* 단일 상품: 가격 + 변동 표시 */}
                     {isSingleProduct && (
                         <div className="flex flex-col items-end">
                             <span
@@ -122,6 +161,7 @@ const PriceProductCard = memo(
                                     ? formatSupplyPrice(group.children[0].price)
                                     : '가격문의'}
                             </span>
+                            <PriceTrend info={singlePriceInfo} />
                             <span className="text-[9px] text-gray-400">(VAT 별도)</span>
                         </div>
                     )}
@@ -143,6 +183,7 @@ const PriceProductCard = memo(
                             <PriceChildRow
                                 key={child.variantCode || idx}
                                 child={child}
+                                priceInfo={priceData?.[child.variantCode || '']}
                             />
                         ))}
                     </div>
@@ -160,8 +201,14 @@ export default function PriceCatalogView() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const debouncedSearch = useDebounce(search, 200);
 
-    /* 데이터: Redis 스냅샷 (기존과 동일한 소스) */
+    /* 데이터: Redis 스냅샷 (상품 목록) */
     const { data, error, isLoading } = useSWR('/api/debug-snapshot', fetcher, {
+        revalidateOnFocus: false,
+        dedupingInterval: 60000,
+    });
+
+    /* 가격 변동 데이터 */
+    const { data: priceData } = useSWR<Record<string, EnhancedPrice>>('/api/prices', fetcher, {
         revalidateOnFocus: false,
         dedupingInterval: 60000,
     });
@@ -270,6 +317,7 @@ export default function PriceCatalogView() {
                                         group={group}
                                         isExpanded={expandedId === group.id}
                                         onToggle={() => toggleGroup(group.id)}
+                                        priceData={priceData ?? null}
                                     />
                                 ))}
                             </div>
