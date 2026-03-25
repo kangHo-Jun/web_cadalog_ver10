@@ -212,7 +212,9 @@ export default function Phase1MobileView() {
                                             <div className="flex justify-between items-start gap-2">
                                                 <div className="flex-1 font-bold text-sm text-gray-800 leading-snug">{child.name}</div>
                                                 <div className="text-right">
-                                                    <div className="text-sm font-black text-blue-600">{formatSupplyPrice(child.price)}</div>
+                                                    <div className={child.price && child.price > 0 ? "text-sm font-black text-blue-600" : "text-sm text-gray-400 font-medium"}>
+                                                        {child.price && child.price > 0 ? formatSupplyPrice(child.price) : '가격문의'}
+                                                    </div>
                                                     <div className="text-[9px] text-gray-400">(VAT 별도)</div>
                                                 </div>
                                             </div>
