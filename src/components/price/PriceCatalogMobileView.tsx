@@ -58,7 +58,7 @@ const MobilePriceItem = memo(({ item, parentName, priceInfo }: { item: ChildItem
             {parentName}
           </h4>
           {!isSingle && (
-            <p className="text-[12px] text-gray-500 font-medium">규격: {item.name}</p>
+            <p className="text-[12px] text-gray-500 font-medium">{item.name}</p>
           )}
         </div>
         <div className="flex flex-col items-end flex-shrink-0">
