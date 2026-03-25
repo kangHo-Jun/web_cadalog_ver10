@@ -80,7 +80,7 @@ export default function PriceCatalogMobileView() {
   // Data fetching
   const { data: snapshotData, isLoading: isSnapshotLoading } = useSWR('/api/debug-snapshot', fetcher);
   const { data: priceData, isLoading: isPriceLoading } = useSWR('/api/prices', fetcher);
-  const { data: catData } = useSWR('/api/categories', fetcher);
+  const { data: catData } = useSWR('/api/categories?type=quote', fetcher);
 
   const categories = catData?.categories || [];
   const isLoading = isSnapshotLoading || isPriceLoading;
