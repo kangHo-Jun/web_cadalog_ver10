@@ -18,95 +18,72 @@ export async function GET() {
         const KST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const isTestPeriod = KST < new Date('2026-04-01T00:00:00+09:00');
         
-        let targetMatchesArray: string[] = [];
         let enhancedPrices: Record<string, any> = {};
 
-        if (isTestPeriod && client) {
-            // [테스트 전용 로직] 
-            await client.connect();
-            const snapshotStr = await client.get('catalog:snapshot:v1');
-            const snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
+        if (isTestPeriod) {
+            // [테스트 전용 로직]
+            // 기본: Sheet 가격 전체를 "none"으로 출력
+            enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
+                acc[code] = {
+                    price,
+                    prevPrice: null,
+                    changeAmount: null,
+                    changeDirection: 'none',
+                    changeRate: null,
+                };
+                return acc;
+            }, {} as any);
 
-            // 1. 이름/코드 -> 관련 정보 맵 생성
-            const nameToInfo = new Map<string, { isHardware: boolean, index: number }>();
-            const codeToVariantCodes = new Map<string, string[]>(); // 이름 -> [vCode1, vCode2...]
+            // 카테고리 223(철물/부자재) 항목에 테스트 변동 데이터 주입
+            // 스냅샷의 variantCode를 키로 직접 출력 (프론트엔드 매칭용)
+            let snapshot: Record<string, any> = {};
+            if (client) {
+                await client.connect();
+                const snapshotStr = await client.get('catalog:snapshot:v1');
+                snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
+            }
 
             let hardwareIdx = 0;
             Object.values(snapshot).forEach((group: any) => {
                 const categoryNos = Array.isArray(group.categoryNo) ? group.categoryNo : [];
                 const isHardware = categoryNos.some((cat: any) => String(cat) === '223');
+                if (!isHardware) return;
 
-                if (isHardware) {
-                    const groupNames = [group.parentName, group.id].filter(Boolean);
-                    group.children?.forEach((child: any) => {
-                        const childNames = [child.name, child.variantCode, child.variant_code].filter(Boolean);
-                        const vCode = child.variantCode || child.variant_code;
-                        
-                        [...groupNames, ...childNames].forEach(name => {
-                            const trimmed = String(name).trim();
-                            if (!nameToInfo.has(trimmed)) {
-                                nameToInfo.set(trimmed, { isHardware: true, index: hardwareIdx++ });
-                            }
-                            if (vCode) {
-                                const codes = codeToVariantCodes.get(trimmed) || [];
-                                if (!codes.includes(vCode)) codes.push(vCode);
-                                codeToVariantCodes.set(trimmed, codes);
-                            }
-                        });
-                    });
-                }
-            });
+                group.children?.forEach((child: any) => {
+                    const vCode = child.variantCode || child.variant_code;
+                    const childPrice = Number(child.price || 0);
 
-            // 2. 데이터 주입 및 이중 맵핑 (이름 + 코드)
-            enhancedPrices = Object.entries(currentPrices).reduce((acc, [sheetKey, price]) => {
-                const trimmedKey = sheetKey.trim();
-                const info = nameToInfo.get(trimmedKey);
-                
-                let data: any;
-                if (info && info.isHardware) {
-                    const mode = info.index % 3;
-                    let prevPrice = price;
+                    if (!vCode || childPrice <= 0) {
+                        hardwareIdx++;
+                        return;
+                    }
+
+                    const mode = hardwareIdx % 3;
+                    let prevPrice = childPrice;
                     let changeAmount = 0;
                     let changeDirection = 'same';
 
-                    if (mode === 0) { // Up (2%)
-                        changeAmount = Math.floor(price * 0.02);
+                    if (mode === 0) {
+                        changeAmount = Math.floor(childPrice * 0.02);
                         changeDirection = 'up';
-                        prevPrice = price - changeAmount;
-                    } else if (mode === 1) { // Down (1.5%)
-                        changeAmount = Math.floor(price * 0.015);
+                        prevPrice = childPrice - changeAmount;
+                    } else if (mode === 1) {
+                        changeAmount = Math.floor(childPrice * 0.015);
                         changeDirection = 'down';
-                        prevPrice = price + changeAmount;
+                        prevPrice = childPrice + changeAmount;
                     }
 
-                    data = {
-                        price,
+                    enhancedPrices[vCode] = {
+                        price: childPrice,
                         prevPrice,
                         changeAmount,
                         changeDirection,
-                        changeRate: prevPrice > 0 ? ((price - prevPrice) / prevPrice) * 100 : 0
+                        changeRate: prevPrice > 0 ? ((childPrice - prevPrice) / prevPrice) * 100 : 0,
                     };
-                } else {
-                    data = {
-                        price,
-                        prevPrice: null,
-                        changeAmount: null,
-                        changeDirection: 'none',
-                        changeRate: null
-                    };
-                }
 
-                // 원본 키(이름 등)로 저장
-                acc[trimmedKey] = data;
-                
-                // 연관된 variantCode가 있다면 추가 저장 (UI 매칭용)
-                const vCodes = codeToVariantCodes.get(trimmedKey) || [];
-                vCodes.forEach(v => {
-                    acc[v] = data;
+                    hardwareIdx++;
                 });
-
-                return acc;
-            }, {} as any);
+            });
 
         } else {
             // [운영 로직] 전일 스냅샷 비교
@@ -163,6 +140,6 @@ export async function GET() {
             { status: 500 }
         );
     } finally {
-        if (client) await client.quit();
+        try { if (client) await client.quit(); } catch { /* client may not be connected */ }
     }
 }
