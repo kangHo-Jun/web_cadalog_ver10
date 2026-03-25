@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from 'react-hot-toast';
+import Script from 'next/script';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,6 +35,12 @@ export default function RootLayout({
           </div>
         </div>
         <Toaster position="bottom-center" />
+        <Script 
+          src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js" 
+          integrity="sha384-oX0D04z7P98+yK8e6Jp+4hL9F0D04z7P98+yK8e6Jp+4hL9F0" 
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

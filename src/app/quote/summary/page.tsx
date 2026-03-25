@@ -4,7 +4,9 @@ import React, { useState } from 'react';
 import { useCartStore } from '@/store/useCartStore';
 import { toSupplyPrice } from '@/lib/price-utils';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, FileText, Trash2, Send } from 'lucide-react';
+import { ArrowLeft, FileText, Trash2, Send, Link2, Share2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useEffect } from 'react';
 
 interface QuoteFormData {
     name: string;
@@ -27,6 +29,18 @@ export default function QuoteSummaryPage() {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    const [submittedData, setSubmittedData] = useState<{ items: any[], total: number } | null>(null);
+
+    // Initialize Kakao
+    useEffect(() => {
+        const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_APP_KEY;
+        if (kakaoKey && typeof window !== 'undefined' && (window as any).Kakao) {
+            const Kakao = (window as any).Kakao;
+            if (!Kakao.isInitialized()) {
+                Kakao.init(kakaoKey);
+            }
+        }
+    }, [submitted]); // Re-check when submitted
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -60,25 +74,103 @@ export default function QuoteSummaryPage() {
         // TODO: 실제 API 연동 시 fetch('/api/quote', { method: 'POST', body: JSON.stringify(quoteData) })
         await new Promise((r) => setTimeout(r, 800));
 
+        setSubmittedData({ 
+            items: items.map(item => ({
+                name: item.product.product_name.replace(/<[^>]*>/g, ''),
+                quantity: item.quantity,
+                price: Number(item.product.price)
+            })), 
+            total: totalAmount 
+        });
         setIsSubmitting(false);
         setSubmitted(true);
         clearCart();
     };
 
+    const handleCopyLink = () => {
+        navigator.clipboard.writeText(window.location.href);
+        toast.success('링크가 복사되었습니다', {
+            duration: 2000,
+            icon: '🔗',
+        });
+    };
+
+    const handleShareKakao = () => {
+        if (typeof window === 'undefined' || !(window as any).Kakao) {
+            toast.error('카카톡 공유를 사용할 수 없습니다.');
+            return;
+        }
+
+        const Kakao = (window as any).Kakao;
+        if (!Kakao.isInitialized()) {
+            const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_APP_KEY;
+            if (kakaoKey) Kakao.init(kakaoKey);
+            else {
+                toast.error('카카오 앱 키가 설정되지 않았습니다.');
+                return;
+            }
+        }
+
+        const itemText = submittedData?.items
+            .slice(0, 3)
+            .map(item => `${item.name} x ${item.quantity}`)
+            .join('\n') + (submittedData?.items.length! > 3 ? `\n외 ${submittedData?.items.length! - 3}건` : '');
+
+        Kakao.Share.sendDefault({
+            objectType: 'feed',
+            content: {
+                title: '대산 견적서',
+                description: `${itemText}\n총 합계: ₩${submittedData?.total.toLocaleString()}원`,
+                imageUrl: 'https://web-cadalog-ver10.vercel.app/logo.png', // Fallback or branding image
+                link: {
+                    mobileWebUrl: window.location.href,
+                    webUrl: window.location.href,
+                },
+            },
+            buttons: [
+                {
+                    title: '견적서 보기',
+                    link: {
+                        mobileWebUrl: window.location.href,
+                        webUrl: window.location.href,
+                    },
+                },
+            ],
+        });
+    };
+
     if (submitted) {
         return (
             <main className="min-h-screen flex items-center justify-center" style={{ background: '#f3f3f3' }}>
-                <div className="bg-white rounded-2xl shadow-md p-12 text-center max-w-md mx-auto">
+                <div className="bg-white rounded-2xl shadow-md p-8 text-center max-w-md w-full mx-auto">
                     <div className="text-5xl mb-4">✅</div>
                     <h2 className="text-2xl font-bold text-gray-800 mb-2">견적 요청 완료</h2>
-                    <p className="text-gray-500 text-sm mb-6">
+                    <p className="text-gray-500 text-sm mb-8">
                         견적 요청이 정상적으로 접수되었습니다. <br />
                         담당자가 확인 후 연락처로 안내해 드립니다.
                     </p>
+
+                    {/* Sharing Buttons */}
+                    <div className="space-y-3 mb-8">
+                        <button
+                            onClick={handleShareKakao}
+                            className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 bg-[#FEE500] text-[#191919] active:scale-[0.98] transition-all"
+                        >
+                            <img src="https://developers.kakao.com/assets/img/about/logos/kakaotalksharing/kakaotalk_sharing_btn_medium.png" alt="Kakao" className="w-5 h-5" />
+                            카카오톡으로 공유
+                        </button>
+                        <button
+                            onClick={handleCopyLink}
+                            className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 bg-gray-50 text-gray-700 active:scale-[0.98] transition-all"
+                        >
+                            <Link2 className="w-4 h-4" />
+                            링크 복사
+                        </button>
+                    </div>
+
                     <button
                         onClick={() => router.push('/')}
-                        className="px-6 py-3 rounded-xl text-white font-semibold text-sm"
-                        style={{ background: '#48BB78' }}
+                        className="w-full py-3.5 rounded-xl text-white font-semibold text-sm bg-[#48BB78] active:scale-[0.98] transition-all"
                     >
                         카탈로그로 돌아가기
                     </button>
