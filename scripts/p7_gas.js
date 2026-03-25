@@ -14,7 +14,7 @@
  *
  * ■ 시트 구조
  *   [설정]       A: 키, B: 값
- *   [매핑테이블] A: custom_variant_code | B: product_no | C: variant_code | D: cached_price | E: 최근업데이트 | F: 결과
+ *   [매핑테이블] A: custom_variant_code | B: product_no | C: variant_code | D: ecount_price_vat | E: 최근업데이트 | F: 결과
  *   [실행로그]   A: 실행시각 | B: 업데이트 | C: 스킵 | D: 오류 | E: 상세
  */
 
@@ -117,40 +117,28 @@ function syncPrices() {
             notifyAdmin_(G_CFG, `syncPrices 토큰 갱신 실패: ${te.message}\n재인증 필요: OAuth 재인증 후 새 토큰을 [설정] 시트에 반영하세요.`);
         }
 
-        // ── Step 4. 매핑테이블 로드 ───────────────────────────
-        Logger.log('Step4: 매핑테이블 로드...');
-        const mappingCache = readMappingTable(G_SS);
-        const cacheSize = Object.keys(mappingCache).length;
-        Logger.log(`Step4: 매핑테이블 ${cacheSize}건 로드`);
-        logs.push(`[${now()}] Step4: 매핑테이블 ${cacheSize}건 로드`);
-
         const mallId = G_CFG[KEY.C24_MALL_ID];
         const apiVer = G_CFG[KEY.C24_API_VERSION] || '2025-12-01';
 
-        // ── Step4.1 카페24 캐시 상태 확인 ───────────────────
+        // ── Step 4. 카페24 캐시 로드 (additional_amount 포함) ─────
         if (!isCafe24CacheDone_()) {
-            Logger.log('Step4.1: 카페24 캐시 미완성 → syncPrices 종료');
-            logs.push(`[${now()}] Step4.1: 카페24 캐시 미완성`);
+            Logger.log('Step4: 카페24 캐시 미완성 → syncPrices 종료');
+            logs.push(`[${now()}] Step4: 카페24 캐시 미완성`);
             writeLog(G_SS, start, updated, skipped, errors, logs.join('\n'));
             return;
         }
 
         const cafe24Cache = readCafe24SheetCache(G_SS);
-        Logger.log(`Step4.1: 카페24 캐시 로드 ${Object.keys(cafe24Cache).length}건`);
+        const cacheSize = Object.keys(cafe24Cache).length;
+        Logger.log(`Step4: 카페24 캐시 로드 ${cacheSize}건`);
+        logs.push(`[${now()}] Step4: 카페24 캐시 ${cacheSize}건 로드`);
 
-        // 디버그: 특정 product_no 전체 목록 포함 여부 확인
         const debugProductNo = G_CFG[KEY.DEBUG_PRODUCT_NO];
         if (debugProductNo) {
             checkProductNoInCatalog(mallId, apiVer, debugProductNo);
         }
 
-        // ── 전체 스캔 제거: 캐시 완료 상태에서만 동기화 진행 ────────
-        if (cacheSize === 0) {
-            Logger.log('Step4: 매핑테이블 비어있음 → 캐시 기반 자동등록에 의존');
-            logs.push(`[${now()}] Step4: 매핑테이블 비어있음`);
-        }
-
-        // ── Step 5. 이카운트 가격과 매핑테이블 비교 → 변동 항목만 업데이트 ──
+        // ── Step 5. 이카운트 가격 vs 카페24 additional_amount 비교 → 변동 항목만 업데이트 ──
         Logger.log('Step5: 가격 변동 감지 및 타겟 업데이트 시작...');
         logs.push(`[${now()}] Step5: 타겟 업데이트 시작`);
 
@@ -167,46 +155,32 @@ function syncPrices() {
                 break;
             }
 
-            let entry = mappingCache[customCode];
-
-            let autoRegistered = false;
-            if (!entry) {
-                // 매핑 없음 → 카페24 실시간 캐시에서 조회
-                const auto = cafe24Cache[customCode];
-                if (!auto) {
-                    Logger.log(`미매핑: ${customCode} (카페24 캐시에도 없음)`);
-                    newMappingRows.push([customCode, '', '', ecPrice, now(), '미매핑']);
-                    const desc = (ecDescriptions && ecDescriptions[customCode]) ? ecDescriptions[customCode] : '';
-                    unmappedRows.push([customCode, desc, now()]);
-                    skipped++;
-                    continue;
-                }
-
-                entry = {
-                    productNo: String(auto.productNo),
-                    variantCode: String(auto.variantCode),
-                    cachedPrice: auto.cachedPrice,
-                };
-                mappingCache[customCode] = entry;
-                autoRegistered = true;
-                Logger.log(`자동등록: ${customCode} → product_no=${entry.productNo}, variant=${entry.variantCode}`);
-            }
-
-            const { productNo, variantCode, cachedPrice } = entry;
             const priceWithVat = Math.round(ecPrice * 1.1);
+            const entry = cafe24Cache[customCode];
 
-            // 가격 변동 없으면 스킵
-            if (Math.round(cachedPrice) === priceWithVat) {
-                newMappingRows.push([customCode, productNo, variantCode, cachedPrice, now(), autoRegistered ? '자동등록+스킵(변동없음)' : '스킵(변동없음)']);
+            if (!entry) {
+                Logger.log(`미매핑: ${customCode} (카페24 캐시에 없음)`);
+                newMappingRows.push([customCode, '', '', priceWithVat, now(), '미매핑']);
+                const desc = (ecDescriptions && ecDescriptions[customCode]) ? ecDescriptions[customCode] : '';
+                unmappedRows.push([customCode, desc, now()]);
                 skipped++;
                 continue;
             }
 
-            Logger.log(`변동: ${customCode} | ${cachedPrice} → ${priceWithVat} (VAT 포함)`);
-            logs.push(`[${now()}] 변동: ${customCode} | ${cachedPrice} → ${priceWithVat} (VAT 포함)`);
+            const { productNo, variantCode, cachedPrice } = entry;
+
+            // additional_amount vs ecount_price_vat 비교
+            if (Math.round(cachedPrice) === priceWithVat) {
+                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), '스킵(변동없음)']);
+                skipped++;
+                continue;
+            }
+
+            Logger.log(`변동: ${customCode} | additional_amount=${cachedPrice} → ecount_vat=${priceWithVat}`);
+            logs.push(`[${now()}] 변동: ${customCode} | ${cachedPrice} → ${priceWithVat}`);
 
             if (G_CFG[KEY.DRY_RUN] === 'true') {
-                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), autoRegistered ? '자동등록+DRY_RUN' : 'DRY_RUN']);
+                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), 'DRY_RUN']);
                 updated++;
                 continue;
             }
@@ -218,12 +192,11 @@ function syncPrices() {
                     Logger.log(`단품 업데이트 성공: ${customCode} | product_no=${productNo} | ${cachedPrice} → ${priceWithVat} (${pRes.status})`);
                     logs.push(`  └ 성공(단품) (${pRes.status}): ${customCode}`);
                     newMappingRows.push([customCode, productNo, '', priceWithVat, now(), '성공(단품)']);
-                    entry.cachedPrice = priceWithVat;
                     updated++;
                 } else {
                     Logger.log(`단품 업데이트 실패: ${customCode} | status=${pRes.status}`);
                     logs.push(`  └ 실패(단품) (${pRes.status}): ${customCode}`);
-                    newMappingRows.push([customCode, productNo, '', cachedPrice, now(), `실패(단품)(${pRes.status})`]);
+                    newMappingRows.push([customCode, productNo, '', priceWithVat, now(), `실패(단품)(${pRes.status})`]);
                     errors++;
                 }
                 Utilities.sleep(DELAY_MS);
@@ -232,19 +205,18 @@ function syncPrices() {
 
             // 카페24 직접 PUT (product_no + variant_code 사용)
             const url = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants/${variantCode}`;
-            const payload = { request: { variant: { additional_amount: String(priceWithVat) } } };
+            const payload = { shop_no: 1, request: { additional_amount: String(priceWithVat) } };
             const res = c24Put(url, apiVer, payload);
 
             if (res.ok) {
                 Logger.log(`업데이트 성공: ${customCode} | product_no=${productNo} | variant=${variantCode} | ${cachedPrice} → ${priceWithVat} (${res.status})`);
                 logs.push(`  └ 성공 (${res.status}): ${customCode}`);
-                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), autoRegistered ? '자동등록+성공' : '성공']);
-                entry.cachedPrice = priceWithVat;
+                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), '성공']);
                 updated++;
             } else {
                 Logger.log(`업데이트 실패: ${customCode} | status=${res.status} | ${res.body.substring(0, 80)}`);
                 logs.push(`  └ 실패 (${res.status}): ${customCode}`);
-                newMappingRows.push([customCode, productNo, variantCode, cachedPrice, now(), autoRegistered ? `자동등록+실패(${res.status})` : `실패(${res.status})`]);
+                newMappingRows.push([customCode, productNo, variantCode, priceWithVat, now(), `실패(${res.status})`]);
                 errors++;
             }
 
@@ -663,7 +635,7 @@ function checkNewProducts() {
         const auto = cache[prodCd];
         if (auto) {
             mappingCache[prodCd] = auto;
-            newMappings.push([prodCd, auto.productNo, auto.variantCode, auto.cachedPrice, now(), '자동등록(증분)']);
+            newMappings.push([prodCd, auto.productNo, auto.variantCode, Math.round(price * 1.1), now(), '자동등록(증분)']);
             continue;
         }
 
@@ -1018,22 +990,21 @@ function setConfig(ss, key, value) {
 
 /**
  * [매핑테이블] 시트 읽기
- * 헤더: custom_variant_code | product_no | variant_code | cached_price | 최근업데이트 | 결과
- * @returns {{ [customCode]: { productNo, variantCode, cachedPrice } }}
+ * 헤더: custom_variant_code | product_no | variant_code | ecount_price_vat | 최근업데이트 | 결과
+ * @returns {{ [customCode]: { productNo, variantCode } }}
  */
 function readMappingTable(ss) {
     const sh = ss.getSheetByName(SH.MAPPING);
     const cache = {};
     if (!sh) return cache;
     const data = sh.getDataRange().getValues();
-    if (data.length <= 1) return cache; // 헤더만 있거나 비어있음
-    for (let i = 1; i < data.length; i++) { // 1행부터 (0행=헤더)
+    if (data.length <= 1) return cache;
+    for (let i = 1; i < data.length; i++) {
         const code = String(data[i][0] || '').trim();
         const productNo = String(data[i][1] || '').trim();
         const varCode = String(data[i][2] || '').trim();
-        const price = parseFloat(String(data[i][3] || '0').replace(/,/g, '')) || 0;
         if (code && productNo) {
-            cache[code] = { productNo, variantCode: varCode, cachedPrice: price };
+            cache[code] = { productNo, variantCode: varCode };
         }
     }
     return cache;
@@ -1043,10 +1014,13 @@ function readMappingTable(ss) {
 function writeMappingTable(ss, rows) {
     const sh = ss.getSheetByName(SH.MAPPING);
     if (!sh) { Logger.log('⚠️ [매핑테이블] 시트 없음'); return; }
-    const header = ['custom_variant_code', 'product_no', 'variant_code', 'cached_price', '최근업데이트', '결과'];
+    const header = ['custom_variant_code', 'product_no', 'variant_code', 'ecount_price_vat', '최근업데이트', '결과'];
     sh.clearContents();
     sh.getRange(1, 1, 1, header.length).setValues([header]);
-    if (rows.length > 0) sh.getRange(2, 1, rows.length, header.length).setValues(rows);
+    if (rows.length > 0) {
+        sh.getRange(2, 1, rows.length, header.length).setValues(rows);
+        sh.getRange(2, 4, rows.length, 1).setNumberFormat('0'); // D열 ecount_price_vat 숫자 서식
+    }
 }
 
 /** [실행로그] 시트에 행 추가 */
@@ -1218,7 +1192,7 @@ function printPriceCheck() {
     Logger.log('[printPriceCheck] 대상 코드 없음: (1)200자이02방수936');
 }
 
-// 특정 품목의 cached_price 출력 (매핑테이블)
+// 특정 품목의 ecount_price_vat 출력 (매핑테이블)
 function printCachedPrice() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sh = ss.getSheetByName('매핑테이블');
@@ -1228,9 +1202,9 @@ function printCachedPrice() {
 
     const header = data[0].map(h => String(h || ''));
     const idxCode = header.indexOf('custom_variant_code');
-    const idxCached = header.indexOf('cached_price');
+    const idxVat = header.indexOf('ecount_price_vat');
 
-    if (idxCode < 0 || idxCached < 0) {
+    if (idxCode < 0 || idxVat < 0) {
         Logger.log('[printCachedPrice] 컬럼 인덱스 찾기 실패');
         Logger.log('[printCachedPrice] 헤더: ' + header.join(' | '));
         return;
@@ -1238,7 +1212,7 @@ function printCachedPrice() {
 
     for (let i = 1; i < data.length; i++) {
         if (String(data[i][idxCode]).trim() === '(1)200자이02방수936') {
-            Logger.log(`cached_price=${data[i][idxCached]}`);
+            Logger.log(`ecount_price_vat=${data[i][idxVat]}`);
             return;
         }
     }
