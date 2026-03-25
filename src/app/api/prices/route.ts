@@ -27,30 +27,34 @@ export async function GET() {
             const snapshotStr = await client.get('catalog:snapshot:v1');
             const snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
 
-            // 철물/부자재(223) 카테고리 품목 추출
-            const targetCodes = new Set<string>();
+            // 철물/부자재(223) 카테고리 품목 추출 (이름 및 코드 포함)
+            const targetMatches = new Set<string>();
             Object.values(snapshot).forEach((group: any) => {
                 const categoryNos = Array.isArray(group.categoryNo) ? group.categoryNo : [];
                 const isHardware = categoryNos.some((cat: any) => String(cat) === '223');
 
                 if (isHardware) {
+                    if (group.parentName) targetMatches.add(String(group.parentName).trim());
                     group.children?.forEach((child: any) => {
+                        if (child.name) targetMatches.add(String(child.name).trim());
                         const code = child.variantCode || child.variant_code;
-                        if (code) targetCodes.add(String(code).trim());
+                        if (code) targetMatches.add(String(code).trim());
                     });
                 }
             });
 
-            targetCodesArray = Array.from(targetCodes);
+            const targetMatchesArray = Array.from(targetMatches);
 
             // 데이터 주입
             enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
-                const trimmedCode = code.trim();
-                const targetIndex = targetCodesArray.indexOf(trimmedCode);
+                const trimmedKey = code.trim();
+                // 키가 이름이거나 코드일 수 있으므로 targetMatches에서 확인
+                const isTarget = targetMatches.has(trimmedKey);
                 
-                if (targetIndex !== -1) {
-                    // 3개 중 1개 순환 (Up, Down, Same)
-                    const mode = targetIndex % 3;
+                if (isTarget) {
+                    // 순환 인덱스 생성을 위해 해시값이나 다른 수단 사용 (여기서는 키의 문자열 합 활용)
+                    const charSum = trimmedKey.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+                    const mode = charSum % 3;
                     let prevPrice = price;
                     let changeAmount = 0;
                     let changeDirection = 'same';
@@ -124,15 +128,7 @@ export async function GET() {
             }, {} as any);
         }
 
-        return NextResponse.json({
-            ...enhancedPrices,
-            _debug: isTestPeriod ? {
-                isTestPeriod,
-                targetCodesCount: targetCodesArray.length,
-                sampleTarget: targetCodesArray.slice(0, 5),
-                sampleCurrent: Object.keys(currentPrices).slice(0, 5),
-            } : undefined
-        }, {
+        return NextResponse.json(enhancedPrices, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0, must-revalidate',
                 'Pragma': 'no-cache',
