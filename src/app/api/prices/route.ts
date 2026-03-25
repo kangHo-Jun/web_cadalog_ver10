@@ -27,41 +27,44 @@ export async function GET() {
             const snapshotStr = await client.get('catalog:snapshot:v1');
             const snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
 
-            // 철물/부자재(223) 카테고리 품목 추출 (이름 및 코드 포함)
-            const targetMatches = new Set<string>();
+            // 1. 이름/코드 -> 관련 정보 맵 생성
+            const nameToInfo = new Map<string, { isHardware: boolean, index: number }>();
+            const codeToVariantCodes = new Map<string, string[]>(); // 이름 -> [vCode1, vCode2...]
+
+            let hardwareIdx = 0;
             Object.values(snapshot).forEach((group: any) => {
                 const categoryNos = Array.isArray(group.categoryNo) ? group.categoryNo : [];
                 const isHardware = categoryNos.some((cat: any) => String(cat) === '223');
 
                 if (isHardware) {
-                    if (group.parentName) targetMatches.add(String(group.parentName).trim());
+                    const groupNames = [group.parentName, group.id].filter(Boolean);
                     group.children?.forEach((child: any) => {
-                        if (child.name) targetMatches.add(String(child.name).trim());
-                        const code = child.variantCode || child.variant_code;
-                        if (code) targetMatches.add(String(code).trim());
+                        const childNames = [child.name, child.variantCode, child.variant_code].filter(Boolean);
+                        const vCode = child.variantCode || child.variant_code;
+                        
+                        [...groupNames, ...childNames].forEach(name => {
+                            const trimmed = String(name).trim();
+                            if (!nameToInfo.has(trimmed)) {
+                                nameToInfo.set(trimmed, { isHardware: true, index: hardwareIdx++ });
+                            }
+                            if (vCode) {
+                                const codes = codeToVariantCodes.get(trimmed) || [];
+                                if (!codes.includes(vCode)) codes.push(vCode);
+                                codeToVariantCodes.set(trimmed, codes);
+                            }
+                        });
                     });
                 }
             });
 
-            const targetMatchesArray = Array.from(targetMatches);
-
-            // 데이터 주입
-            enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
-                const trimmedKey = code.trim();
-                // 1. 완전 일치 확인
-                let isTarget = targetMatches.has(trimmedKey);
+            // 2. 데이터 주입 및 이중 맵핑 (이름 + 코드)
+            enhancedPrices = Object.entries(currentPrices).reduce((acc, [sheetKey, price]) => {
+                const trimmedKey = sheetKey.trim();
+                const info = nameToInfo.get(trimmedKey);
                 
-                // 2. 부분 일치 확인 (이름 형식이 다를 수 있음)
-                if (!isTarget) {
-                    isTarget = targetMatchesArray.some(match => 
-                        trimmedKey.includes(match) || match.includes(trimmedKey)
-                    );
-                }
-                
-                if (isTarget) {
-                    // 순환 인덱스 생성을 위해 해시값이나 다른 수단 사용 (여기서는 키의 문자열 합 활용)
-                    const charSum = trimmedKey.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-                    const mode = charSum % 3;
+                let data: any;
+                if (info && info.isHardware) {
+                    const mode = info.index % 3;
                     let prevPrice = price;
                     let changeAmount = 0;
                     let changeDirection = 'same';
@@ -76,7 +79,7 @@ export async function GET() {
                         prevPrice = price + changeAmount;
                     }
 
-                    acc[code] = {
+                    data = {
                         price,
                         prevPrice,
                         changeAmount,
@@ -84,7 +87,7 @@ export async function GET() {
                         changeRate: prevPrice > 0 ? ((price - prevPrice) / prevPrice) * 100 : 0
                     };
                 } else {
-                    acc[code] = {
+                    data = {
                         price,
                         prevPrice: null,
                         changeAmount: null,
@@ -92,6 +95,16 @@ export async function GET() {
                         changeRate: null
                     };
                 }
+
+                // 원본 키(이름 등)로 저장
+                acc[trimmedKey] = data;
+                
+                // 연관된 variantCode가 있다면 추가 저장 (UI 매칭용)
+                const vCodes = codeToVariantCodes.get(trimmedKey) || [];
+                vCodes.forEach(v => {
+                    acc[v] = data;
+                });
+
                 return acc;
             }, {} as any);
 
@@ -100,6 +113,7 @@ export async function GET() {
             let yesterdayPrices: Record<string, number> | null = null;
             if (client) {
                 await client.connect();
+                // ... (생략된 기존 운영 로직) ...
                 const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
                 const kstYesterday = new Date(kstNow);
                 kstYesterday.setDate(kstNow.getDate() - 1);
@@ -135,15 +149,7 @@ export async function GET() {
             }, {} as any);
         }
 
-        return NextResponse.json({
-            ...enhancedPrices,
-            _is_test_period: isTestPeriod,
-            _debug: isTestPeriod ? {
-                targetMatchesCount: targetMatchesArray.length,
-                sampleMatches: targetMatchesArray.slice(0, 10),
-                sampleCurrent: Object.keys(currentPrices).slice(0, 10),
-            } : undefined
-        }, {
+        return NextResponse.json(enhancedPrices, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0, must-revalidate',
                 'Pragma': 'no-cache',
