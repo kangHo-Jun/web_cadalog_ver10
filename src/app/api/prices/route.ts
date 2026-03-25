@@ -16,7 +16,7 @@ export async function GET() {
         // 2. 테스트 기간 분기 (~2025.03.31)
         const now = new Date();
         const KST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-        const isTestPeriod = KST < new Date('2025-04-01T00:00:00+09:00');
+        const isTestPeriod = KST < new Date('2026-04-01T00:00:00+09:00');
 
         let enhancedPrices: Record<string, any> = {};
 
