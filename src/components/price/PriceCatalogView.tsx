@@ -219,11 +219,12 @@ export default function PriceCatalogView() {
         return allGroups.filter((group) => {
             if (selectedCategory && !group.categoryNo?.includes(selectedCategory))
                 return false;
-            if (
-                debouncedSearch &&
-                !group.parentName.toLowerCase().includes(debouncedSearch.toLowerCase())
-            )
-                return false;
+            if (debouncedSearch) {
+                const term = debouncedSearch.toLowerCase();
+                const matchParent = group.parentName.toLowerCase().includes(term);
+                const matchChild = group.children?.some(c => c.name.toLowerCase().includes(term));
+                if (!matchParent && !matchChild) return false;
+            }
             return true;
         });
     }, [data, selectedCategory, debouncedSearch]);

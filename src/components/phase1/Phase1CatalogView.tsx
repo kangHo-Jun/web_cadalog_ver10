@@ -70,7 +70,10 @@ export default function Phase1CatalogView() {
         const allGroups: GroupedProduct[] = Object.values(data.lastSnapshot ?? data);
         return allGroups.filter((group) => {
             if (selectedCategory && !group.categoryNo?.includes(selectedCategory)) return false;
-            if (debouncedSearch && !group.parentName.toLowerCase().includes(debouncedSearch.toLowerCase())) return false;
+            if (debouncedSearch) {
+                const term = debouncedSearch.toLowerCase();
+                if (!group.parentName.toLowerCase().includes(term) && !group.children?.some(c => c.name.toLowerCase().includes(term))) return false;
+            }
             return true;
         });
     }, [data, selectedCategory, debouncedSearch]);
