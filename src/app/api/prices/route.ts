@@ -10,14 +10,14 @@ export async function GET() {
     const client = redisUrl ? createClient({ url: redisUrl }) : null;
 
     try {
-        // 1. 현재 가격 맵 (Sheet)
-        const currentPrices = await getPriceMap();
-
-        // 2. 테스트 기간 분기 (~2026.03.31)
+        // 1. 테스트 기간 분기 (~2026.03.31)
         const now = new Date();
         const KST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const isTestPeriod = KST < new Date('2026-04-01T00:00:00+09:00');
-        
+
+        // 2. Sheet 가격 맵 (테스트 기간만 필요 — Sheet 키 baseline)
+        const currentPrices = isTestPeriod ? await getPriceMap() : {};
+
         let enhancedPrices: Record<string, any> = {};
 
         if (isTestPeriod) {
@@ -86,44 +86,59 @@ export async function GET() {
             });
 
         } else {
-            // [운영 로직] 전일 스냅샷 비교
-            let yesterdayPrices: Record<string, number> | null = null;
+            // [운영 로직] 카탈로그 스냅샷(variantCode) 기준 전일 비교
             if (client) {
                 await client.connect();
-                // ... (생략된 기존 운영 로직) ...
+            }
+
+            // 카탈로그 스냅샷에서 현재 가격 추출 (variantCode 키)
+            let snapshot: Record<string, any> = {};
+            if (client) {
+                const snapshotStr = await client.get('catalog:snapshot:v1');
+                snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
+            }
+
+            // 전일 가격 스냅샷 (variantCode 키, 크론이 저장)
+            let yesterdayPrices: Record<string, number> | null = null;
+            if (client) {
                 const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
                 const kstYesterday = new Date(kstNow);
                 kstYesterday.setDate(kstNow.getDate() - 1);
                 const dateStr = kstYesterday.toISOString().split('T')[0];
                 const snapshotKey = `price_snapshot:${dateStr}`;
-
                 const cached = await client.get(snapshotKey);
                 if (cached) {
                     yesterdayPrices = JSON.parse(cached);
                 }
             }
 
-            enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
-                const prevPrice = yesterdayPrices ? yesterdayPrices[code] : null;
-                let changeAmount = null;
-                let changeDirection = 'none';
+            // 카탈로그 스냅샷 전체 순회 → variantCode 기준 비교
+            Object.values(snapshot).forEach((group: any) => {
+                group.children?.forEach((child: any) => {
+                    const vCode = child.variantCode || child.variant_code;
+                    const price = Number(child.price || 0);
+                    if (!vCode || price <= 0) return;
 
-                if (prevPrice !== null && prevPrice !== undefined) {
-                    changeAmount = price - prevPrice;
-                    if (changeAmount > 0) changeDirection = 'up';
-                    else if (changeAmount < 0) changeDirection = 'down';
-                    else changeDirection = 'same';
-                }
+                    const prevPrice = yesterdayPrices ? (yesterdayPrices[vCode] ?? null) : null;
+                    let changeAmount: number | null = null;
+                    let changeDirection = 'none';
 
-                acc[code] = {
-                    price,
-                    prevPrice,
-                    changeAmount,
-                    changeDirection,
-                    changeRate: prevPrice ? ((price - prevPrice) / prevPrice) * 100 : null
-                };
-                return acc;
-            }, {} as any);
+                    if (prevPrice !== null) {
+                        changeAmount = price - prevPrice;
+                        if (changeAmount > 0) changeDirection = 'up';
+                        else if (changeAmount < 0) changeDirection = 'down';
+                        else changeDirection = 'same';
+                    }
+
+                    enhancedPrices[vCode] = {
+                        price,
+                        prevPrice,
+                        changeAmount,
+                        changeDirection,
+                        changeRate: prevPrice ? ((price - prevPrice) / prevPrice) * 100 : null,
+                    };
+                });
+            });
         }
 
         return NextResponse.json(enhancedPrices, {
