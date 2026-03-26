@@ -86,9 +86,10 @@ export default function PriceCatalogMobileView() {
   }, [search]);
 
   // Data fetching
-  const { data: snapshotData, isLoading: isSnapshotLoading } = useSWR('/api/debug-snapshot', fetcher);
-  const { data: priceData, isLoading: isPriceLoading } = useSWR('/api/prices', fetcher);
-  const { data: catData } = useSWR('/api/categories?type=quote', fetcher);
+  const swrOpts = { revalidateOnFocus: false, dedupingInterval: 60000 };
+  const { data: snapshotData, isLoading: isSnapshotLoading } = useSWR('/api/debug-snapshot', fetcher, swrOpts);
+  const { data: priceData, isLoading: isPriceLoading } = useSWR('/api/prices', fetcher, swrOpts);
+  const { data: catData } = useSWR('/api/categories?type=quote', fetcher, swrOpts);
 
   const categories = catData?.categories || [];
   const isLoading = isSnapshotLoading || isPriceLoading;
