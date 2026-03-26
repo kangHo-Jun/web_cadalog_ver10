@@ -178,17 +178,7 @@ export default function PriceCatalogMobileView() {
 
       {/* ── 본문 리스트 ── */}
       <main className="flex-1 overflow-y-auto">
-        {selectedCategory === null && !debouncedSearch ? (
-          <div className="flex flex-col items-center justify-center py-24 px-10 text-center">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
-              <Search className="w-8 h-8 text-[#1e3a5f]/40" />
-            </div>
-            <h3 className="text-gray-900 font-bold mb-1">가격 정보를 조회하세요</h3>
-            <p className="text-xs text-gray-400 leading-relaxed">
-              상단 카테고리를 선택하거나<br />검색어를 입력하면 실시간 단가를 확인할 수 있습니다.
-            </p>
-          </div>
-        ) : isLoading ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-8 h-8 border-4 border-[#1e3a5f] border-t-transparent rounded-full animate-spin mb-3" />
             <p className="text-[12px] text-gray-400">최신 가격 정보를 불러오는 중...</p>
