@@ -7,11 +7,13 @@ import { QUOTE_CATEGORIES } from '@/config/quote-categories';
 interface FixedSidebarProps {
     selectedCategoryNo: number | null;
     onCategoryChange: (no: number) => void;
+    activeColor?: string;
 }
 
 export default function FixedSidebar({
     selectedCategoryNo,
     onCategoryChange,
+    activeColor = '#48BB78', // Default to green
 }: FixedSidebarProps) {
     return (
         <aside
@@ -31,7 +33,7 @@ export default function FixedSidebar({
                     )}
                     style={
                         selectedCategoryNo === null || selectedCategoryNo === 0
-                            ? { background: '#48BB78' }
+                            ? { background: activeColor }
                             : {}
                     }
                 >
@@ -55,7 +57,7 @@ export default function FixedSidebar({
                                     ? 'text-white'
                                     : 'text-gray-700 hover:bg-gray-200'
                             )}
-                            style={isActive ? { background: '#48BB78' } : {}}
+                            style={isActive ? { background: activeColor } : {}}
                         >
                             {cat.display_name}
                         </button>

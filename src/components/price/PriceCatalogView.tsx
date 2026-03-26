@@ -288,6 +288,7 @@ export default function PriceCatalogView() {
                 <FixedSidebar
                     selectedCategoryNo={selectedCategory}
                     onCategoryChange={handleCategoryChange}
+                    activeColor="#123628"
                 />
 
                 <main className="flex-1 overflow-hidden flex flex-col relative p-4">

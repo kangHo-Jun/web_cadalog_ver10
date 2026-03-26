@@ -10,138 +10,140 @@ export async function GET() {
     const client = redisUrl ? createClient({ url: redisUrl }) : null;
 
     try {
-        // 1. 테스트 기간 분기 (~2026.03.31)
+        // 1. 현재 가격 맵 (Sheet)
+        const currentPrices = await getPriceMap();
+
+        // 2. 테스트 기간 분기 (~2026.03.31)
         const now = new Date();
         const KST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const isTestPeriod = KST < new Date('2026-04-01T00:00:00+09:00');
 
-        // 2. Sheet 가격 맵 (테스트 기간만 필요 — Sheet 키 baseline)
-        const currentPrices = isTestPeriod ? await getPriceMap() : {};
-
+        let targetMatchesArray: string[] = [];
         let enhancedPrices: Record<string, any> = {};
 
-        if (isTestPeriod) {
-            // [테스트 전용 로직]
-            // 기본: Sheet 가격 전체를 "none"으로 출력
-            enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
-                acc[code] = {
-                    price,
-                    prevPrice: null,
-                    changeAmount: null,
-                    changeDirection: 'none',
-                    changeRate: null,
-                };
-                return acc;
-            }, {} as any);
+        if (isTestPeriod && client) {
+            // [테스트 전용 로직] 
+            await client.connect();
+            const snapshotStr = await client.get('catalog:snapshot:v1');
+            const snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
 
-            // 카테고리 223(철물/부자재) 항목에 테스트 변동 데이터 주입
-            // 스냅샷의 variantCode를 키로 직접 출력 (프론트엔드 매칭용)
-            let snapshot: Record<string, any> = {};
-            if (client) {
-                await client.connect();
-                const snapshotStr = await client.get('catalog:snapshot:v1');
-                snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
-            }
-
-            let hardwareIdx = 0;
+            // 철물/부자재(223) 카테고리 품목 추출 (이름 및 코드 포함)
+            const targetMatches = new Set<string>();
             Object.values(snapshot).forEach((group: any) => {
                 const categoryNos = Array.isArray(group.categoryNo) ? group.categoryNo : [];
                 const isHardware = categoryNos.some((cat: any) => String(cat) === '223');
-                if (!isHardware) return;
 
-                group.children?.forEach((child: any) => {
-                    const vCode = child.variantCode || child.variant_code;
-                    const childPrice = Number(child.price || 0);
+                if (isHardware) {
+                    if (group.parentName) targetMatches.add(String(group.parentName).trim());
+                    group.children?.forEach((child: any) => {
+                        if (child.name) targetMatches.add(String(child.name).trim());
+                        const code = child.variantCode || child.variant_code;
+                        if (code) targetMatches.add(String(code).trim());
+                    });
+                }
+            });
 
-                    if (!vCode || childPrice <= 0) {
-                        hardwareIdx++;
-                        return;
-                    }
+            const targetMatchesArray = Array.from(targetMatches);
 
-                    const mode = hardwareIdx % 3;
-                    let prevPrice = childPrice;
+            // 데이터 주입
+            enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
+                const trimmedKey = code.trim();
+                // 1. 완전 일치 확인
+                let isTarget = targetMatches.has(trimmedKey);
+
+                // 2. 부분 일치 확인 (이름 형식이 다를 수 있음)
+                if (!isTarget) {
+                    isTarget = targetMatchesArray.some(match =>
+                        trimmedKey.includes(match) || match.includes(trimmedKey)
+                    );
+                }
+
+                if (isTarget) {
+                    // 순환 인덱스 생성을 위해 해시값이나 다른 수단 사용 (여기서는 키의 문자열 합 활용)
+                    const charSum = trimmedKey.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+                    const mode = charSum % 3;
+                    let prevPrice = price;
                     let changeAmount = 0;
                     let changeDirection = 'same';
 
-                    if (mode === 0) {
-                        changeAmount = Math.floor(childPrice * 0.02);
+                    if (mode === 0) { // Up (2%)
+                        changeAmount = Math.floor(price * 0.02);
                         changeDirection = 'up';
-                        prevPrice = childPrice - changeAmount;
-                    } else if (mode === 1) {
-                        changeAmount = Math.floor(childPrice * 0.015);
+                        prevPrice = price - changeAmount;
+                    } else if (mode === 1) { // Down (1.5%)
+                        changeAmount = Math.floor(price * 0.015);
                         changeDirection = 'down';
-                        prevPrice = childPrice + changeAmount;
+                        prevPrice = price + changeAmount;
                     }
 
-                    enhancedPrices[vCode] = {
-                        price: childPrice,
+                    acc[code] = {
+                        price,
                         prevPrice,
                         changeAmount,
                         changeDirection,
-                        changeRate: prevPrice > 0 ? ((childPrice - prevPrice) / prevPrice) * 100 : 0,
+                        changeRate: prevPrice > 0 ? ((price - prevPrice) / prevPrice) * 100 : 0
                     };
-
-                    hardwareIdx++;
-                });
-            });
+                } else {
+                    acc[code] = {
+                        price,
+                        prevPrice: null,
+                        changeAmount: null,
+                        changeDirection: 'none',
+                        changeRate: null
+                    };
+                }
+                return acc;
+            }, {} as any);
 
         } else {
-            // [운영 로직] 카탈로그 스냅샷(variantCode) 기준 전일 비교
-            if (client) {
-                await client.connect();
-            }
-
-            // 카탈로그 스냅샷에서 현재 가격 추출 (variantCode 키)
-            let snapshot: Record<string, any> = {};
-            if (client) {
-                const snapshotStr = await client.get('catalog:snapshot:v1');
-                snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
-            }
-
-            // 전일 가격 스냅샷 (variantCode 키, 크론이 저장)
+            // [운영 로직] 전일 스냅샷 비교
             let yesterdayPrices: Record<string, number> | null = null;
             if (client) {
+                await client.connect();
                 const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
                 const kstYesterday = new Date(kstNow);
                 kstYesterday.setDate(kstNow.getDate() - 1);
                 const dateStr = kstYesterday.toISOString().split('T')[0];
                 const snapshotKey = `price_snapshot:${dateStr}`;
+
                 const cached = await client.get(snapshotKey);
                 if (cached) {
                     yesterdayPrices = JSON.parse(cached);
                 }
             }
 
-            // 카탈로그 스냅샷 전체 순회 → variantCode 기준 비교
-            Object.values(snapshot).forEach((group: any) => {
-                group.children?.forEach((child: any) => {
-                    const vCode = child.variantCode || child.variant_code;
-                    const price = Number(child.price || 0);
-                    if (!vCode || price <= 0) return;
+            enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
+                const prevPrice = yesterdayPrices ? yesterdayPrices[code] : null;
+                let changeAmount = null;
+                let changeDirection = 'none';
 
-                    const prevPrice = yesterdayPrices ? (yesterdayPrices[vCode] ?? null) : null;
-                    let changeAmount: number | null = null;
-                    let changeDirection = 'none';
+                if (prevPrice !== null && prevPrice !== undefined) {
+                    changeAmount = price - prevPrice;
+                    if (changeAmount > 0) changeDirection = 'up';
+                    else if (changeAmount < 0) changeDirection = 'down';
+                    else changeDirection = 'same';
+                }
 
-                    if (prevPrice !== null) {
-                        changeAmount = price - prevPrice;
-                        if (changeAmount > 0) changeDirection = 'up';
-                        else if (changeAmount < 0) changeDirection = 'down';
-                        else changeDirection = 'same';
-                    }
-
-                    enhancedPrices[vCode] = {
-                        price,
-                        prevPrice,
-                        changeAmount,
-                        changeDirection,
-                        changeRate: prevPrice ? ((price - prevPrice) / prevPrice) * 100 : null,
-                    };
-                });
-            });
+                acc[code] = {
+                    price,
+                    prevPrice,
+                    changeAmount,
+                    changeDirection,
+                    changeRate: prevPrice ? ((price - prevPrice) / prevPrice) * 100 : null
+                };
+                return acc;
+            }, {} as any);
         }
 
-        return NextResponse.json(enhancedPrices, {
+        return NextResponse.json({
+            ...enhancedPrices,
+            _is_test_period: isTestPeriod,
+            _debug: isTestPeriod ? {
+                targetMatchesCount: targetMatchesArray.length,
+                sampleMatches: targetMatchesArray.slice(0, 10),
+                sampleCurrent: Object.keys(currentPrices).slice(0, 10),
+            } : undefined
+        }, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0, must-revalidate',
                 'Pragma': 'no-cache',
@@ -155,6 +157,6 @@ export async function GET() {
             { status: 500 }
         );
     } finally {
-        try { if (client) await client.quit(); } catch { /* client may not be connected */ }
+        if (client) await client.quit();
     }
 }
