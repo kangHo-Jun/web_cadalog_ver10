@@ -114,7 +114,6 @@ export default function Phase1CatalogView() {
                 <FixedSidebar
                     selectedCategoryNo={selectedCategory}
                     onCategoryChange={handleCategoryChange}
-                    activeColor="#123628"
                 />
 
                 {/* Main content — offset left by sidebar width */}

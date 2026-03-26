@@ -33,11 +33,17 @@ function useDebounce(value: string, ms = 200) {
 
 /* ── 가격 변동 표시 ── */
 const PriceTrend = memo(({ info }: { info: EnhancedPrice | undefined }) => {
+    // CLS 방지를 위해 항상 최소 높이 유지
     if (!info || info.changeDirection === 'none' || info.changeAmount === null) {
-        return null;
+        return <div className="min-h-[24px]" />;
     }
+    
     if (info.changeDirection === 'same') {
-        return <span className="text-[10px] text-gray-400">—</span>;
+        return (
+            <div className="min-h-[24px] flex items-center">
+                <span className="text-[10px] text-gray-400">—</span>
+            </div>
+        );
     }
 
     const isUp = info.changeDirection === 'up';
@@ -288,7 +294,6 @@ export default function PriceCatalogView() {
                 <FixedSidebar
                     selectedCategoryNo={selectedCategory}
                     onCategoryChange={handleCategoryChange}
-                    activeColor="#123628"
                 />
 
                 <main className="flex-1 overflow-hidden flex flex-col relative p-4">
