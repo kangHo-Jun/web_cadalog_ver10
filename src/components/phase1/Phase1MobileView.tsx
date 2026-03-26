@@ -202,7 +202,7 @@ export default function Phase1MobileView() {
                     <div className="sticky top-0 bg-white border-b border-gray-100 px-3 py-3 flex gap-2 overflow-x-auto no-scrollbar z-40 shadow-sm">
                         <button
                             onClick={() => setSelectedCategory(null)}
-                            className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                            className={`px-4 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
                                 selectedCategory === null ? 'bg-[#48BB78] text-white' : 'bg-gray-100 text-gray-500'
                             }`}
                         >
@@ -212,7 +212,7 @@ export default function Phase1MobileView() {
                             <button
                                 key={cat.category_no}
                                 onClick={() => setSelectedCategory(cat.category_no)}
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                                className={`px-4 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
                                     selectedCategory === cat.category_no ? 'bg-[#48BB78] text-white' : 'bg-gray-100 text-gray-500'
                                 }`}
                             >

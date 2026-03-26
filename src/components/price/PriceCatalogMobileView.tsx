@@ -158,7 +158,7 @@ export default function PriceCatalogMobileView() {
           <div className="flex px-4 py-3 gap-2 min-w-max">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-all ${
+              className={`px-4 py-2.5 rounded-full text-[13px] font-bold transition-all ${
                 selectedCategory === null ? 'bg-[#1e3a5f] text-white shadow-sm' : 'bg-gray-100 text-gray-500 border border-gray-200'
               }`}
             >
@@ -168,7 +168,7 @@ export default function PriceCatalogMobileView() {
               <button
                 key={cat.category_no}
                 onClick={() => setSelectedCategory(cat.category_no)}
-                className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-all ${
+                className={`px-4 py-2.5 rounded-full text-[13px] font-bold transition-all ${
                   selectedCategory === cat.category_no ? 'bg-[#1e3a5f] text-white shadow-sm' : 'bg-gray-100 text-gray-500 border border-gray-200'
                 }`}
               >
