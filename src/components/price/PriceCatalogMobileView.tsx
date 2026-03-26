@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import useSWR from 'swr';
+import Link from 'next/link';
 import { Search, ChevronRight, AlertCircle } from 'lucide-react';
 import { GroupedProduct, ChildItem } from '@/lib/product-utils';
 import { formatPrice, toSupplyPrice } from '@/lib/price-utils';
@@ -130,7 +131,9 @@ export default function PriceCatalogMobileView() {
             </span>
           </a>
           <h1 className="text-white/80 font-bold text-sm">실시간 가격정보</h1>
-          <div className="w-10"></div> {/* 벨런스용 공간 */}
+          <Link href="/" className="text-white/60 text-[11px] font-medium whitespace-nowrap">
+            ← 카탈로그
+          </Link>
         </div>
 
         {/* 검색 입력 */}

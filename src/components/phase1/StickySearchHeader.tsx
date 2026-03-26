@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef } from 'react';
+import Link from 'next/link';
 import { Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
 
@@ -26,12 +27,20 @@ export default function StickySearchHeader({
             className="sticky top-0 z-50 flex items-center gap-3 px-4 py-3"
             style={{ background: '#123628' }}
         >
-            {/* Brand */}
-            <a href="https://daesan.ai" target="_self">
-                <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
-                    DAESAN
-                </span>
-            </a>
+            {/* Brand + Nav */}
+            <div className="flex items-center gap-3">
+                <a href="https://daesan.ai" target="_self">
+                    <span className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
+                        DAESAN
+                    </span>
+                </a>
+                <Link
+                    href="/price"
+                    className="text-white/60 hover:text-white text-xs font-medium whitespace-nowrap transition-colors"
+                >
+                    가격정보 →
+                </Link>
+            </div>
 
             {/* Search input */}
             <div className="flex-1 flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2 border border-white/20">

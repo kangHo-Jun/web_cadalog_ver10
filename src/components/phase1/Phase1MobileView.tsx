@@ -19,6 +19,7 @@ import { QUOTE_CATEGORIES } from '@/config/quote-categories';
 import { formatSupplyPrice } from '@/lib/price-utils';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -29,9 +30,14 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
  */
 const MobileHeader = ({ cartCount, onCartClick, onReset }: { cartCount: number; onCartClick: () => void; onReset: () => void }) => (
     <header className="fixed top-0 left-0 right-0 h-14 bg-[#123628] flex items-center justify-between px-4 z-50 shadow-md">
-        <a href="https://daesan.ai" target="_self" className="flex items-center">
-            <h1 className="text-white text-lg font-bold tracking-tight">Daesan</h1>
-        </a>
+        <div className="flex items-center gap-3">
+            <a href="https://daesan.ai" target="_self" className="flex items-center">
+                <h1 className="text-white text-lg font-bold tracking-tight">Daesan</h1>
+            </a>
+            <Link href="/price" className="text-white/60 text-[11px] font-medium whitespace-nowrap">
+                가격정보 →
+            </Link>
+        </div>
         <div className="flex items-center gap-1">
             <button 
                 onClick={onReset}
