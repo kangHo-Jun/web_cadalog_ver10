@@ -1363,7 +1363,11 @@ function populateRepairSheet() {
 
 function doPost(e) {
     try {
-        const payload = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+        const payload = e && e.postData && e.postData.contents
+          ? JSON.parse(e.postData.contents)
+          : e && e.parameter && e.parameter.items
+            ? { items: JSON.parse(e.parameter.items) }
+            : {};
         const items = Array.isArray(payload.items) ? payload.items : null;
 
         if (!items || items.length === 0) {
@@ -1436,4 +1440,8 @@ function doPost(e) {
             }))
             .setMimeType(ContentService.MimeType.JSON);
     }
+}
+
+function doGet(e) {
+  return doPost(e);
 }
