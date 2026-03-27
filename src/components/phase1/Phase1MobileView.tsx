@@ -167,7 +167,7 @@ export default function Phase1MobileView() {
     );
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col pb-24 font-sans text-gray-900 overflow-x-hidden pt-14">
+        <div className="min-h-screen bg-gray-50 flex flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] font-sans text-gray-900 overflow-x-hidden pt-14">
             <MobileHeader 
                 cartCount={totalItems} 
                 onCartClick={() => router.push('/quote/summary')} 
@@ -313,14 +313,14 @@ export default function Phase1MobileView() {
                                 })}
                             </div>
 
-                            <div className="h-4" />
+                            <div className="h-[env(safe-area-inset-bottom)] min-h-[1rem]" />
                         </motion.div>
                     </>
                 )}
             </AnimatePresence>
 
             {/* Bottom Sticky Button */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-50">
+            <div className="fixed bottom-0 left-0 right-0 pt-4 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-white/80 backdrop-blur-md border-t border-gray-100 z-50">
                 <button
                     disabled={totalItems === 0}
                     onClick={() => router.push('/quote/summary')}

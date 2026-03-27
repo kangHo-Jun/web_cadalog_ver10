@@ -19,7 +19,7 @@ const CartSummaryBar: React.FC<CartSummaryBarProps> = ({
     if (itemCount === 0) return null;
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 shadow-lg z-50">
+        <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-orange-500 to-orange-600 text-white pt-4 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-lg z-50">
             <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-6">
                     <div>

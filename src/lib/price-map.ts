@@ -1,4 +1,4 @@
-import { createClient } from 'redis';
+import { getRedisClient } from './redis-client';
 
 const SHEET_ID = '1_T_pl2ItqfmdAsDmrjkg1BBZyQMAVXkUrPMEwhGI6ek';
 const SHEET_GID = '1267943882';
@@ -9,6 +9,7 @@ const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx
 
 type PriceMap = Record<string, number>;
 
+// ... (Gviz types and normalization functions)
 type GvizColumn = {
     id?: string;
     label?: string;
@@ -113,28 +114,19 @@ async function fetchPriceMapFromSheet(): Promise<PriceMap> {
 }
 
 export async function getPriceMap(): Promise<PriceMap> {
-    const redisUrl = process.env.KV_REDIS_URL;
-    if (!redisUrl) {
-        return fetchPriceMapFromSheet();
-    }
-
-    const client = createClient({ url: redisUrl });
-
     try {
-        await client.connect();
-        const cached = await client.get(PRICE_CACHE_KEY);
+        const client = getRedisClient();
+        
+        const cached = await client.get<PriceMap>(PRICE_CACHE_KEY);
         if (cached) {
-            return JSON.parse(cached) as PriceMap;
+            return cached;
         }
 
         const fresh = await fetchPriceMapFromSheet();
-        await client.set(PRICE_CACHE_KEY, JSON.stringify(fresh), { EX: PRICE_CACHE_TTL_SECONDS });
+        await client.set(PRICE_CACHE_KEY, JSON.stringify(fresh), { ex: PRICE_CACHE_TTL_SECONDS });
         return fresh;
-    } finally {
-        try {
-            await client.quit();
-        } catch (error) {
-            console.error('Failed to close Redis client for prices cache', error);
-        }
+    } catch (error) {
+        console.error('Redis cache error for prices, falling back to Google Sheets:', error);
+        return fetchPriceMapFromSheet();
     }
 }

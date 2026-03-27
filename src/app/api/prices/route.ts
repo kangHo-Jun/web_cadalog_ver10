@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getPriceMap } from '@/lib/price-map';
-import { createClient } from 'redis';
+import { getRedisClient } from '@/lib/redis-client';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
-    const redisUrl = process.env.KV_REDIS_URL;
-    const client = redisUrl ? createClient({ url: redisUrl }) : null;
-
     try {
+        const client = getRedisClient();
+
         // 1. 현재 가격 맵 (Sheet)
         const currentPrices = await getPriceMap();
 
@@ -21,11 +20,10 @@ export async function GET() {
         let targetMatchesArray: string[] = [];
         let enhancedPrices: Record<string, any> = {};
 
-        if (isTestPeriod && client) {
+        if (isTestPeriod) {
             // [테스트 전용 로직] 
-            await client.connect();
-            const snapshotStr = await client.get('catalog:snapshot:v1');
-            const snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
+            // @upstash/redis parses JSON automatically
+            const snapshot = await client.get<Record<string, any>>('catalog:snapshot:v1') || {};
 
             // 철물/부자재(223) 카테고리 품목 추출 (이름 및 코드 포함)
             const targetMatches = new Set<string>();
@@ -43,7 +41,7 @@ export async function GET() {
                 }
             });
 
-            const targetMatchesArray = Array.from(targetMatches);
+            targetMatchesArray = Array.from(targetMatches);
 
             // 데이터 주입
             enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
@@ -59,7 +57,6 @@ export async function GET() {
                 }
 
                 if (isTarget) {
-                    // 순환 인덱스 생성을 위해 해시값이나 다른 수단 사용 (여기서는 키의 문자열 합 활용)
                     const charSum = trimmedKey.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
                     const mode = charSum % 3;
                     let prevPrice = price;
@@ -97,20 +94,13 @@ export async function GET() {
 
         } else {
             // [운영 로직] 전일 스냅샷 비교
-            let yesterdayPrices: Record<string, number> | null = null;
-            if (client) {
-                await client.connect();
-                const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-                const kstYesterday = new Date(kstNow);
-                kstYesterday.setDate(kstNow.getDate() - 1);
-                const dateStr = kstYesterday.toISOString().split('T')[0];
-                const snapshotKey = `price_snapshot:${dateStr}`;
+            const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+            const kstYesterday = new Date(kstNow);
+            kstYesterday.setDate(kstNow.getDate() - 1);
+            const dateStr = kstYesterday.toISOString().split('T')[0];
+            const snapshotKey = `price_snapshot:${dateStr}`;
 
-                const cached = await client.get(snapshotKey);
-                if (cached) {
-                    yesterdayPrices = JSON.parse(cached);
-                }
-            }
+            const yesterdayPrices = await client.get<Record<string, number>>(snapshotKey);
 
             enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
                 const prevPrice = yesterdayPrices ? yesterdayPrices[code] : null;
@@ -151,12 +141,10 @@ export async function GET() {
             },
         });
     } catch (error: any) {
-        console.error('Failed to fetch prices map:', error?.message || error);
+        console.error('API Error:', error);
         return NextResponse.json(
             { error: 'Failed to fetch prices', details: error?.message || 'Unknown error' },
             { status: 500 }
         );
-    } finally {
-        if (client) await client.quit();
     }
 }

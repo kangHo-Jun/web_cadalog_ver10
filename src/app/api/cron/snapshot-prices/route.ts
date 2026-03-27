@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from 'redis';
+import { getRedisClient } from '@/lib/redis-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,19 +18,12 @@ export async function GET(request: Request) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const redisUrl = process.env.KV_REDIS_URL;
-    if (!redisUrl) {
-        return NextResponse.json({ error: 'KV_REDIS_URL missing' }, { status: 500 });
-    }
-
-    const client = createClient({ url: redisUrl });
+    const client = getRedisClient();
 
     try {
-        await client.connect();
-
         // 1. 카탈로그 스냅샷에서 variantCode → price 맵 추출
-        const snapshotStr = await client.get('catalog:snapshot:v1');
-        const snapshot = snapshotStr ? JSON.parse(snapshotStr) : {};
+        // @upstash/redis parses JSON automatically
+        const snapshot = await client.get<Record<string, any>>('catalog:snapshot:v1') || {};
 
         const variantPriceMap: Record<string, number> = {};
         Object.values(snapshot).forEach((group: any) => {
@@ -50,7 +43,7 @@ export async function GET(request: Request) {
 
         // 3. Redis 저장 (TTL 60일)
         await client.set(snapshotKey, JSON.stringify(variantPriceMap), {
-            EX: 60 * 24 * 60 * 60 // 60 days
+            ex: 60 * 24 * 60 * 60 // 60 days
         });
 
         console.log(`Price snapshot saved: ${snapshotKey} (${Object.keys(variantPriceMap).length} variants)`);
@@ -63,7 +56,5 @@ export async function GET(request: Request) {
     } catch (error: any) {
         console.error('Snapshot failed:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
-    } finally {
-        try { await client.quit(); } catch { /* client may not be connected */ }
     }
 }
