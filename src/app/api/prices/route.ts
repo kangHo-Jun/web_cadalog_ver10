@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getPriceMap } from '@/lib/price-map';
-import { getRedisClient } from '@/lib/redis-client';
+import { redisGet } from '@/lib/redis-client';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
     try {
-        const client = getRedisClient();
-
         // 1. 현재 가격 맵 (Sheet)
         const currentPrices = await getPriceMap();
 
@@ -22,8 +20,7 @@ export async function GET() {
 
         if (isTestPeriod) {
             // [테스트 전용 로직] 
-            // @upstash/redis parses JSON automatically
-            const snapshot = await client.get<Record<string, any>>('catalog:snapshot:v1') || {};
+            const snapshot = await redisGet<Record<string, any>>('catalog:snapshot:v1') || {};
 
             // 철물/부자재(223) 카테고리 품목 추출 (이름 및 코드 포함)
             const targetMatches = new Set<string>();
@@ -100,7 +97,7 @@ export async function GET() {
             const dateStr = kstYesterday.toISOString().split('T')[0];
             const snapshotKey = `price_snapshot:${dateStr}`;
 
-            const yesterdayPrices = await client.get<Record<string, number>>(snapshotKey);
+            const yesterdayPrices = await redisGet<Record<string, number>>(snapshotKey);
 
             enhancedPrices = Object.entries(currentPrices).reduce((acc, [code, price]) => {
                 const prevPrice = yesterdayPrices ? yesterdayPrices[code] : null;

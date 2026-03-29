@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getRedisClient } from '@/lib/redis-client';
+import { redisGet } from '@/lib/redis-client';
 
 export async function GET() {
   const start = Date.now();
   try {
-    const client = getRedisClient();
-    // @upstash/redis parses JSON automatically
-    const snapshot = await client.get<Record<string, any>>('catalog:snapshot:v1') || {};
+    const snapshot = await redisGet<Record<string, any>>('catalog:snapshot:v1') || {};
 
     return NextResponse.json({
       status: 'OK',

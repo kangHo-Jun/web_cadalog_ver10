@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getRedisClient } from '@/lib/redis-client';
+import { redisGet, redisSet } from '@/lib/redis-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,12 +18,9 @@ export async function GET(request: Request) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const client = getRedisClient();
-
     try {
         // 1. 카탈로그 스냅샷에서 variantCode → price 맵 추출
-        // @upstash/redis parses JSON automatically
-        const snapshot = await client.get<Record<string, any>>('catalog:snapshot:v1') || {};
+        const snapshot = await redisGet<Record<string, any>>('catalog:snapshot:v1') || {};
 
         const variantPriceMap: Record<string, number> = {};
         Object.values(snapshot).forEach((group: any) => {
@@ -42,8 +39,8 @@ export async function GET(request: Request) {
         const snapshotKey = `price_snapshot:${dateStr}`;
 
         // 3. Redis 저장 (TTL 60일)
-        await client.set(snapshotKey, JSON.stringify(variantPriceMap), {
-            ex: 60 * 24 * 60 * 60 // 60 days
+        await redisSet(snapshotKey, variantPriceMap, {
+            EX: 60 * 24 * 60 * 60 // 60 days
         });
 
         console.log(`Price snapshot saved: ${snapshotKey} (${Object.keys(variantPriceMap).length} variants)`);

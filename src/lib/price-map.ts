@@ -1,4 +1,4 @@
-import { getRedisClient } from './redis-client';
+import { redisGet, redisSet } from './redis-client';
 
 const SHEET_ID = '1_T_pl2ItqfmdAsDmrjkg1BBZyQMAVXkUrPMEwhGI6ek';
 const SHEET_GID = '1267943882';
@@ -115,15 +115,13 @@ async function fetchPriceMapFromSheet(): Promise<PriceMap> {
 
 export async function getPriceMap(): Promise<PriceMap> {
     try {
-        const client = getRedisClient();
-        
-        const cached = await client.get<PriceMap>(PRICE_CACHE_KEY);
+        const cached = await redisGet<PriceMap>(PRICE_CACHE_KEY);
         if (cached) {
             return cached;
         }
 
         const fresh = await fetchPriceMapFromSheet();
-        await client.set(PRICE_CACHE_KEY, JSON.stringify(fresh), { ex: PRICE_CACHE_TTL_SECONDS });
+        await redisSet(PRICE_CACHE_KEY, fresh, { EX: PRICE_CACHE_TTL_SECONDS });
         return fresh;
     } catch (error) {
         console.error('Redis cache error for prices, falling back to Google Sheets:', error);

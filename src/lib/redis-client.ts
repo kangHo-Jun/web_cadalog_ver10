@@ -1,25 +1,51 @@
-import { Redis } from '@upstash/redis';
+import { createClient, type RedisClientType } from 'redis';
 
-let client: Redis | null = null;
+let client: RedisClientType | null = null;
+let connectPromise: Promise<RedisClientType> | null = null;
 
-/**
- * Redis 싱글턴 클라이언트를 반환합니다.
- * @upstash/redis는 HTTP 기반이므로 별도의 connect/disconnect가 필요하지 않습니다.
- */
-export function getRedisClient(): Redis {
-    if (!client) {
-        // Vercel Redis URL (KV_REDIS_URL)만 사용
-        const url = process.env.KV_REDIS_URL;
-        const token = process.env.KV_REST_API_TOKEN || process.env.REDIS_TOKEN;
+async function getRedisClient(): Promise<RedisClientType> {
+    if (client) return client;
+    if (connectPromise) return connectPromise;
 
-        if (!url || !token) {
-            throw new Error('Redis configuration missing (KV_REDIS_URL + KV_REST_API_TOKEN)');
-        }
-
-        client = new Redis({
-            url,
-            token,
-        });
+    const url = process.env.KV_REDIS_URL;
+    if (!url) {
+        throw new Error('Redis configuration missing (KV_REDIS_URL)');
     }
-    return client;
+
+    const nextClient = createClient({ url });
+    nextClient.on('error', (err) => {
+        console.error('❌ Redis Client Error:', err);
+    });
+
+    connectPromise = nextClient.connect().then(() => {
+        client = nextClient;
+        return client;
+    });
+
+    return connectPromise;
+}
+
+export async function redisGet<T = unknown>(key: string): Promise<T | null> {
+    const c = await getRedisClient();
+    const raw = await c.get(key);
+    if (raw == null) return null;
+    try {
+        return JSON.parse(raw) as T;
+    } catch {
+        return raw as unknown as T;
+    }
+}
+
+export async function redisSet(
+    key: string,
+    value: unknown,
+    options?: { EX?: number }
+): Promise<void> {
+    const c = await getRedisClient();
+    const payload = typeof value === 'string' ? value : JSON.stringify(value);
+    if (options?.EX) {
+        await c.set(key, payload, { EX: options.EX });
+        return;
+    }
+    await c.set(key, payload);
 }
