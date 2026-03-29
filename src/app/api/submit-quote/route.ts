@@ -59,7 +59,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ result: 'ok' });
 
     } catch (error: any) {
-        console.error('Sheets API error:', error);
+        console.error('Sheets API error full:', JSON.stringify({
+            message: error?.message,
+            code: error?.code,
+            status: error?.status,
+            errors: error?.errors,
+        }));
         return NextResponse.json(
             { result: 'error', message: error?.message || 'Unknown error' },
             { status: 500 }
