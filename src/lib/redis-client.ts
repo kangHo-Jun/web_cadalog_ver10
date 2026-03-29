@@ -8,13 +8,12 @@ let client: Redis | null = null;
  */
 export function getRedisClient(): Redis {
     if (!client) {
-        // REDIS_URL과 REDIS_TOKEN이 환경변수에 설정되어 있어야 합니다.
-        // Vercel KV 사용 시 KV_REST_API_URL, KV_REST_API_TOKEN과 동일할 수 있습니다.
-        const url = process.env.REDIS_URL || process.env.KV_REST_API_URL;
-        const token = process.env.REDIS_TOKEN || process.env.KV_REST_API_TOKEN;
+        // Vercel Redis URL (KV_REDIS_URL)만 사용
+        const url = process.env.KV_REDIS_URL;
+        const token = process.env.KV_REST_API_TOKEN || process.env.REDIS_TOKEN;
 
         if (!url || !token) {
-            throw new Error('Redis configuration missing (REDIS_URL/TOKEN or KV_REST_API_URL/TOKEN)');
+            throw new Error('Redis configuration missing (KV_REDIS_URL + KV_REST_API_TOKEN)');
         }
 
         client = new Redis({
