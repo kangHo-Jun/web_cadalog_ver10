@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
+import { google } from 'googleapis';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+const SPREADSHEET_ID = '1oQN0oApCGHSMHGYf_1gIpF-5dG8ETSsqrx-eAlz394k';
+const SHEET_NAME = '시트1';
 
 export async function POST(req: Request) {
     try {
@@ -9,36 +13,53 @@ export async function POST(req: Request) {
         const items = Array.isArray(body?.items) ? body.items : null;
 
         if (!items) {
-            return NextResponse.json({ result: 'error', message: 'items array is required' }, { status: 400 });
+            return NextResponse.json(
+                { result: 'error', message: 'items array is required' },
+                { status: 400 }
+            );
         }
 
-        const webhookUrl = process.env.GAS_QUOTE_WEBHOOK_URL;
-
-        if (!webhookUrl) {
-            return NextResponse.json({ result: 'error', message: 'GAS_QUOTE_WEBHOOK_URL is not configured' }, { status: 500 });
-        }
-
-        const response = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
+        const auth = new google.auth.GoogleAuth({
+            credentials: {
+                client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+                private_key: process.env.GOOGLE_SERVICE_ACCOUNT_KEY?.replace(/\\n/g, '\n'),
             },
-            body: 'items=' + encodeURIComponent(JSON.stringify(items)),
-            redirect: 'follow',
-            cache: 'no-store',
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
         });
 
-        const text = await response.text();
-        let data: any;
+        const sheets = google.sheets({ version: 'v4', auth });
 
-        try {
-            data = JSON.parse(text);
-        } catch {
-            data = { result: 'error', message: text || 'Invalid GAS response' };
-        }
+        const today = new Date().toLocaleDateString('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).replace(/\. /g, '-').replace('.', '');
 
-        return NextResponse.json(data, { status: response.ok ? 200 : response.status });
+        const rows = items.map((item: any) => {
+            const row = new Array(28).fill('');
+            row[2] = today;
+            row[4] = '안양';
+            row[6] = '두현숙';
+            row[23] = item.product_code || '';
+            row[26] = item.quantity || '';
+            row[27] = item.price || '';
+            return row;
+        });
+
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEET_NAME}!A:AB`,
+            valueInputOption: 'RAW',
+            requestBody: {
+                values: rows,
+            },
+        });
+
+        return NextResponse.json({ result: 'ok' });
+
     } catch (error: any) {
+        console.error('Sheets API error:', error);
         return NextResponse.json(
             { result: 'error', message: error?.message || 'Unknown error' },
             { status: 500 }
