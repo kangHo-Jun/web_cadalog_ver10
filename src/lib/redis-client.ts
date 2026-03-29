@@ -19,7 +19,7 @@ async function getRedisClient(): Promise<RedisClientType> {
 
     connectPromise = nextClient.connect().then(() => {
         client = nextClient;
-        return client;
+        return nextClient;
     });
 
     return connectPromise;
