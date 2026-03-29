@@ -934,7 +934,7 @@ function fetchEcountPrices(cfg, sessionId) {
     for (const item of items) {
         const cd = String(item.PROD_CD || '');
         const des = String(item.PROD_DES || '');
-        if (cd.includes('(1)') && des.includes('◈')) {
+        if (cd) {
             map[cd] = parseFloat(String(item[priceField] || '0').replace(/,/g, '')) || 0;
             descMap[cd] = des;
         }
