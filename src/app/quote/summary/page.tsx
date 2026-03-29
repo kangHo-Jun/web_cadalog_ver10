@@ -71,8 +71,19 @@ export default function QuoteSummaryPage() {
 
         console.log('[견적 요청]', quoteData);
 
-        // TODO: 실제 API 연동 시 fetch('/api/quote', { method: 'POST', body: JSON.stringify(quoteData) })
-        await new Promise((r) => setTimeout(r, 800));
+        const response = await fetch('/api/submit-quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: quoteData.items }),
+        });
+
+        if (!response.ok) {
+            alert('견적 요청 중 오류가 발생했습니다. 다시 시도해주세요.');
+            setIsSubmitting(false);
+            return;
+        }
+
+        alert(`견적 요청이 접수되었습니다!\n선택 품목: ${quoteData.items.length}개`);
 
         setSubmittedData({ 
             items: items.map(item => ({
