@@ -66,16 +66,18 @@ let G_CONSEC_FAIL = 0;
 // ════════════════════════════════════════════════════════
 
 function onOpen() {
-    try {
-        const ui = SpreadsheetApp.getUi();
-        ui.createMenu('🛠️ 카페24 동기화')
-            .addItem('카페24 캐시 전체 초기화', 'initCafe24Cache')
-            .addSeparator()
-            .addItem('트리거 설정 (1시간마다)', 'createTrigger')
-            .addToUi();
-    } catch (e) {
-        // WebApp 컨텍스트에서는 getUi() 사용 불가 — 무시
-    }
+  try {
+    const ui = SpreadsheetApp.getUi();
+    ui.createMenu('🛠️ 카페24 동기화')
+        .addItem('▶ 즉시 동기화 (카페24 다운로드 + 가격 업데이트)', 'buildCafe24Cache')
+        .addSeparator()
+        .addItem('카페24 캐시 전체 초기화', 'initCafe24Cache')
+        .addSeparator()
+        .addItem('트리거 설정 (1시간마다)', 'createTrigger')
+        .addToUi();
+  } catch (e) {
+    // WebApp 컨텍스트에서는 getUi() 사용 불가 — 무시
+  }
 }
 
 
