@@ -21,9 +21,10 @@ export async function POST(req: Request) {
         const response = await fetch(webhookUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: JSON.stringify({ items }),
+            body: 'items=' + encodeURIComponent(JSON.stringify(items)),
+            redirect: 'follow',
             cache: 'no-store',
         });
 

@@ -66,12 +66,16 @@ let G_CONSEC_FAIL = 0;
 // ════════════════════════════════════════════════════════
 
 function onOpen() {
-    const ui = SpreadsheetApp.getUi();
-    ui.createMenu('🛠️ 카페24 동기화')
-        .addItem('카페24 캐시 전체 초기화', 'initCafe24Cache')
-        .addSeparator()
-        .addItem('트리거 설정 (1시간마다)', 'createTrigger')
-        .addToUi();
+    try {
+        const ui = SpreadsheetApp.getUi();
+        ui.createMenu('🛠️ 카페24 동기화')
+            .addItem('카페24 캐시 전체 초기화', 'initCafe24Cache')
+            .addSeparator()
+            .addItem('트리거 설정 (1시간마다)', 'createTrigger')
+            .addToUi();
+    } catch (e) {
+        // WebApp 컨텍스트에서는 getUi() 사용 불가 — 무시
+    }
 }
 
 
@@ -1363,11 +1367,7 @@ function populateRepairSheet() {
 
 function doPost(e) {
     try {
-        const payload = e && e.postData && e.postData.contents
-          ? JSON.parse(e.postData.contents)
-          : e && e.parameter && e.parameter.items
-            ? { items: JSON.parse(e.parameter.items) }
-            : {};
+        const payload = JSON.parse((e && e.postData && e.postData.contents) || '{}');
         const items = Array.isArray(payload.items) ? payload.items : null;
 
         if (!items || items.length === 0) {
@@ -1440,8 +1440,4 @@ function doPost(e) {
             }))
             .setMimeType(ContentService.MimeType.JSON);
     }
-}
-
-function doGet(e) {
-  return doPost(e);
 }
