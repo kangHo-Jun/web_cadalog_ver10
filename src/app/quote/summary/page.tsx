@@ -74,7 +74,10 @@ export default function QuoteSummaryPage() {
         const response = await fetch('/api/submit-quote', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: quoteData.items }),
+            body: JSON.stringify({
+                items: quoteData.items,
+                customer: quoteData.customer,
+            }),
         });
 
         if (!response.ok) {

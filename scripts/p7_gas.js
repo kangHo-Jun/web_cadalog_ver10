@@ -107,6 +107,16 @@ function syncPrices() {
         Logger.log(`Step2: 이카운트 ${Object.keys(ecPrices).length}건 조회 완료`);
         logs.push(`[${now()}] Step2: 이카운트 ${Object.keys(ecPrices).length}건`);
 
+        // ── Step 2.0 카페24상품 시트 G열에 PROD_DES 저장 ───────────
+        try {
+            writeProdDesToCafe24Sheet_(G_SS, ecDescriptions);
+            Logger.log('Step2.0: [카페24상품] G열 PROD_DES 저장 완료');
+            logs.push(`[${now()}] Step2.0: 카페24상품 G열 PROD_DES 저장`);
+        } catch (e) {
+            Logger.log('Step2.0: PROD_DES 저장 실패: ' + e.message);
+            logs.push(`[${now()}] Step2.0: PROD_DES 저장 실패`);
+        }
+
         // ── Step 2.1 토큰 자동 갱신/사전 알림 ─────────────────
         try {
             const refreshed = ensureTokenRefreshIfNeeded_(G_CFG);
@@ -1006,6 +1016,34 @@ function setConfig(ss, key, value) {
             return;
         }
     }
+}
+
+/**
+ * [카페24상품] 시트 G열에 이카운트 PROD_DES 저장
+ * 매칭 기준: D열 custom_variant_code == 이카운트 PROD_CD
+ * A~F열은 건드리지 않음
+ */
+function writeProdDesToCafe24Sheet_(ss, ecDescriptions) {
+    if (!ss || !ecDescriptions) return;
+    const sh = ss.getSheetByName('카페24상품');
+    if (!sh) return;
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return;
+
+    const codeRange = sh.getRange(2, 4, lastRow - 1, 1); // D열 custom_variant_code
+    const desRange = sh.getRange(2, 7, lastRow - 1, 1);  // G열 PROD_DES
+    const codes = codeRange.getValues();
+    const existing = desRange.getValues();
+
+    const updates = codes.map((row, idx) => {
+        const code = String(row[0] || '').trim();
+        if (code && ecDescriptions[code]) {
+            return [ecDescriptions[code]];
+        }
+        return [existing[idx] ? existing[idx][0] : ''];
+    });
+
+    desRange.setValues(updates);
 }
 
 /**
