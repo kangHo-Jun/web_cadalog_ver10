@@ -513,9 +513,19 @@ export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
             totalAmount,
             requestDate: new Date().toISOString()
         };
-        console.log('견적 요청 데이터:', quoteData);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        alert(`견적 요청이 접수되었습니다!\n\n담당자가 ${formData.email}로 견적서를 보내드립니다.\n\n선택 품목: ${cart.length}개\n총 금액: ${totalAmount.toLocaleString('ko-KR')}원`);
+        const response = await fetch('/api/submit-quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: quoteData.items }),
+        });
+
+        if (!response.ok) {
+            alert('견적 요청 중 오류가 발생했습니다. 다시 시도해주세요.');
+            setIsSubmitting(false);
+            return;
+        }
+
+        alert(`견적 요청이 접수되었습니다!\n선택 품목: ${cart.length}개`);
         setCart([]);
         setFormData({ name: '', email: '', phone: '', message: '' });
         setIsModalOpen(false);
