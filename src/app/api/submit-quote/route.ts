@@ -64,8 +64,8 @@ export async function POST(req: Request) {
             row[1] = customer.phone || '';     // B열
             row[2] = customer.message || '';   // C열
             row[5] = today;                    // F열
-            row[7] = '안양';                   // H열
-            row[9] = '두현숙';                 // J열
+            row[7] = '100';                    // H열: 출하창고
+            row[9] = '';                       // J열: 거래처 담당자 빈칸
             row[26] = productNameMap[item.product_code] || item.product_code || ''; // AA열
             row[29] = item.quantity || '';     // AD열
             row[30] = item.price || '';        // AE열
