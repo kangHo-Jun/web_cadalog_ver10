@@ -51,10 +51,10 @@ export async function POST(req: Request) {
         const cafe24Rows = cafe24Data.data.values || [];
         const productNameMap: Record<string, string> = {};
         cafe24Rows.forEach((r) => {
-            const variantCode = r[4]; // E열: variant_code
-            const prodDes = r[6];     // G열: PROD_DES
-            if (variantCode && prodDes) {
-                productNameMap[variantCode] = prodDes;
+            const variantCode = r[4];       // E열: variant_code
+            const customVariantCode = r[3]; // D열: custom_variant_code
+            if (variantCode && customVariantCode) {
+                productNameMap[variantCode] = customVariantCode;
             }
         });
 
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
             row[5] = today;                    // F열
             row[7] = '안양';                   // H열
             row[9] = '두현숙';                 // J열
-            row[26] = productNameMap[item.product_code] || item.product_name || ''; // AA열
+            row[26] = productNameMap[item.product_code] || item.product_code || ''; // AA열
             row[29] = item.quantity || '';     // AD열
             row[30] = item.price || '';        // AE열
             return row;
