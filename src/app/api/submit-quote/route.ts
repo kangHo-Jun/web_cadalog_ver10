@@ -59,22 +59,32 @@ export async function POST(req: Request) {
         });
 
         const rows = items.map((item: any) => {
-            const row = new Array(31).fill('');
+            const quantity = Number(item.quantity || 0);
+            const price = Number(item.price || 0);
+            const supplyAmount = quantity * price;
+            const vatAmount = Math.round(supplyAmount * 0.1);
+            const totalAmount = supplyAmount + vatAmount;
+
+            const row = new Array(39).fill('');
             row[0] = customer.name || '';      // A열
             row[1] = customer.phone || '';     // B열
             row[2] = customer.message || '';   // C열
+            row[3] = '3883833';                // D열
             row[5] = today;                    // F열
             row[7] = '100';                    // H열: 출하창고
             row[9] = '';                       // J열: 거래처 담당자 빈칸
             row[26] = productNameMap[item.product_code] || item.product_code || ''; // AA열
             row[29] = item.quantity || '';     // AD열
             row[30] = item.price || '';        // AE열
+            row[32] = supplyAmount;            // AG열
+            row[33] = vatAmount;               // AH열
+            row[38] = totalAmount;             // AM열
             return row;
         });
 
         await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:AE`,
+            range: `${SHEET_NAME}!A:AM`,
             valueInputOption: 'RAW',
             requestBody: {
                 values: rows,
