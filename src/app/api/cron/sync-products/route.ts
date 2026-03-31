@@ -2,10 +2,19 @@ import { NextResponse } from 'next/server';
 import { createClient } from 'redis';
 import apiClient from '@/lib/api-client';
 import { normalizeProductName, GroupedProduct, ChildItem } from '@/lib/product-utils';
-import { QUOTE_CATEGORY_NOS } from '@/config/quote-categories';
+import { QUOTE_CATEGORIES, QUOTE_CATEGORY_NOS } from '@/config/quote-categories';
 
 const CATEGORY_NOS = QUOTE_CATEGORY_NOS;
 const SNAPSHOT_KEY = 'catalog:snapshot:v1';
+const CATEGORY_ORDER = QUOTE_CATEGORIES.map((c) => c.category_no);
+
+function getCategorySortIndex(categoryNos: number[] = []) {
+  const matchedIndexes = categoryNos
+    .map((no) => CATEGORY_ORDER.indexOf(no))
+    .filter((index) => index >= 0);
+
+  return matchedIndexes.length > 0 ? Math.min(...matchedIndexes) : Number.MAX_SAFE_INTEGER;
+}
 
 export async function GET() {
   try {
@@ -84,14 +93,32 @@ export async function GET() {
       };
     }
 
+    const groups = Object.values(grouped).sort((a, b) => {
+      const aIdx = getCategorySortIndex(a.categoryNo);
+      const bIdx = getCategorySortIndex(b.categoryNo);
+      if (aIdx !== bIdx) return aIdx - bIdx;
+
+      const aName = a.parentName || '';
+      const bName = b.parentName || '';
+      const aIsEng = /^[A-Za-z]/.test(aName);
+      const bIsEng = /^[A-Za-z]/.test(bName);
+      if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
+
+      return aName.localeCompare(bName, aIsEng ? 'en' : 'ko');
+    });
+
+    const sortedGrouped = Object.fromEntries(
+      groups.map((group) => [group.id, group])
+    );
+
     const client = createClient({ url: process.env.KV_REDIS_URL });
     await client.connect();
-    await client.set(SNAPSHOT_KEY, JSON.stringify(grouped));
+    await client.set(SNAPSHOT_KEY, JSON.stringify(sortedGrouped));
     await client.quit();
 
     return NextResponse.json({
       success: true,
-      products: Object.keys(grouped).length,
+      products: groups.length,
       debug: 'cron-sync-v2'
     });
 

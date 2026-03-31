@@ -10,6 +10,7 @@ import CartDrawer from './CartDrawer';
 import { useCartStore } from '@/store/useCartStore';
 import { log, trackMetric } from '@/lib/logger';
 import { GroupedProduct } from '@/lib/product-utils';
+import { QUOTE_CATEGORIES } from '@/config/quote-categories';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Search,
@@ -22,6 +23,16 @@ const fetcher = (url: string) =>
         if (!res.ok) throw new Error('fetch failed');
         return res.json();
     });
+
+const categoryOrder = QUOTE_CATEGORIES.map((c) => c.category_no);
+
+function getCategorySortIndex(categoryNos: number[] = []) {
+    const matchedIndexes = categoryNos
+        .map((no) => categoryOrder.indexOf(no))
+        .filter((index) => index >= 0);
+
+    return matchedIndexes.length > 0 ? Math.min(...matchedIndexes) : Number.MAX_SAFE_INTEGER;
+}
 
 // 200ms debounce hook
 function useDebounce(value: string, ms = 200) {
@@ -69,14 +80,33 @@ export default function Phase1CatalogView() {
         if (!data) return [];
         const allGroups: GroupedProduct[] = Object.values(data.lastSnapshot ?? data);
         return allGroups.filter((group) => {
-            if (selectedCategory && !group.categoryNo?.includes(selectedCategory)) return false;
             if (debouncedSearch) {
                 const term = debouncedSearch.toLowerCase();
                 if (!group.parentName.toLowerCase().includes(term) && !group.children?.some(c => c.name.toLowerCase().includes(term))) return false;
             }
             return true;
         });
-    }, [data, selectedCategory, debouncedSearch]);
+    }, [data, debouncedSearch]);
+
+    const filteredGroups = useMemo((): GroupedProduct[] => {
+        const filtered = selectedCategory === null
+            ? groups
+            : groups.filter((g) => g.categoryNo?.includes(selectedCategory));
+
+        return [...filtered].sort((a, b) => {
+            const aIdx = getCategorySortIndex(a.categoryNo);
+            const bIdx = getCategorySortIndex(b.categoryNo);
+            if (aIdx !== bIdx) return aIdx - bIdx;
+
+            const aName = a.parentName || '';
+            const bName = b.parentName || '';
+            const aIsEng = /^[A-Za-z]/.test(aName);
+            const bIsEng = /^[A-Za-z]/.test(bName);
+            if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
+
+            return aName.localeCompare(bName, aIsEng ? 'en' : 'ko');
+        });
+    }, [groups, selectedCategory]);
 
     const handleCategoryChange = (no: number) => {
         const start = performance.now();
@@ -120,12 +150,12 @@ export default function Phase1CatalogView() {
                 <main className="flex-1 overflow-hidden flex flex-col relative p-4">
                     {/* Product count */}
                     <p className="text-xs text-gray-500 mb-3 flex-shrink-0">
-                        {isLoading ? '불러오는 중...' : `총 ${groups.length}개 상품 그룹`}
+                        {isLoading ? '불러오는 중...' : `총 ${filteredGroups.length}개 상품 그룹`}
                     </p>
                     {/* 리스트 — 내부 스크롤만 발생 */}
                     <div className="flex-1 overflow-y-auto pb-24">
                         <ProductListPhase1
-                            groups={groups}
+                            groups={filteredGroups}
                             loading={isLoading}
                             error={error}
                         />
