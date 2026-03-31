@@ -99,10 +99,18 @@ export default function PriceCatalogMobileView() {
     if (!snapshotData?.lastSnapshot) return [];
 
     // 전체 상품 리스트 (평탄화)
-    const allGroups: GroupedProduct[] = Object.values(snapshotData.lastSnapshot);
+    const sorted: GroupedProduct[] = (Object.values(snapshotData.lastSnapshot) as GroupedProduct[])
+      .sort((a, b) => {
+        const aName = a.parentName || '';
+        const bName = b.parentName || '';
+        const aIsEng = /^[A-Za-z]/.test(aName);
+        const bIsEng = /^[A-Za-z]/.test(bName);
+        if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
+        return aName.localeCompare(bName, aIsEng ? 'en' : 'ko');
+      });
     const flattened: FlattenedPriceItem[] = [];
 
-    allGroups.forEach(group => {
+    sorted.forEach(group => {
       // 카테고리 필터
       if (selectedCategory && !group.categoryNo?.includes(selectedCategory)) return;
 

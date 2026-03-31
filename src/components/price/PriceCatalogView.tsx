@@ -221,8 +221,17 @@ export default function PriceCatalogView() {
 
     const groups = useMemo((): GroupedProduct[] => {
         if (!data) return [];
-        const allGroups: GroupedProduct[] = Object.values(data.lastSnapshot ?? data);
-        return allGroups.filter((group) => {
+        const sorted: GroupedProduct[] = (Object.values(data.lastSnapshot ?? data) as GroupedProduct[])
+            .sort((a, b) => {
+                const aName = a.parentName || '';
+                const bName = b.parentName || '';
+                const aIsEng = /^[A-Za-z]/.test(aName);
+                const bIsEng = /^[A-Za-z]/.test(bName);
+                if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
+                return aName.localeCompare(bName, aIsEng ? 'en' : 'ko');
+            });
+
+        return sorted.filter((group) => {
             if (selectedCategory && !group.categoryNo?.includes(selectedCategory))
                 return false;
             if (debouncedSearch) {
