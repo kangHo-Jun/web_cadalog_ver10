@@ -89,11 +89,24 @@ export async function POST(req: Request) {
 
         const nextRow = (colA.data.values?.length ?? 0) + 1;
 
-        await sheets.spreadsheets.values.update({
+        await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A${nextRow}`,
-            valueInputOption: 'RAW',
-            requestBody: { values: rows },
+            requestBody: {
+                valueInputOption: 'RAW',
+                data: rows.flatMap((row, index) => {
+                    const rowNumber = nextRow + index;
+                    return [
+                        {
+                            range: `${SHEET_NAME}!A${rowNumber}:H${rowNumber}`,
+                            values: [row.slice(0, 8)],
+                        },
+                        {
+                            range: `${SHEET_NAME}!K${rowNumber}:AM${rowNumber}`,
+                            values: [row.slice(10)],
+                        },
+                    ];
+                }),
+            },
         });
 
         return NextResponse.json({ result: 'ok' });
