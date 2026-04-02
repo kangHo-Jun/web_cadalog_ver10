@@ -242,6 +242,19 @@ function syncPrices() {
 
         clearSyncProgress_();
 
+        // 기존 미매핑 판단(이카운트 기준) 보존:
+        // for (const [customCode, price] of Object.entries(ecPrices)) {
+        //   if (!cafe24Cache[customCode]) {
+        //     // 미매핑 처리
+        //   }
+        // }
+        unmappedRows.length = 0;
+        for (const [customCode, variants] of Object.entries(cafe24Cache)) {
+            if (Object.prototype.hasOwnProperty.call(ecPrices, customCode)) continue;
+            const firstVariant = Array.isArray(variants) ? (variants[0] || {}) : (variants || {});
+            unmappedRows.push([customCode, String(firstVariant.productNo || ''), now()]);
+        }
+
         // ── Step 6. 매핑테이블 갱신 ──────────────────────────
         if (newMappingRows.length > 0) {
             writeMappingTable(G_SS, newMappingRows);
