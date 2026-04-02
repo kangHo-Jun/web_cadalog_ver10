@@ -82,22 +82,18 @@ export async function POST(req: Request) {
             return row;
         });
 
-        const firstColumnData = await sheets.spreadsheets.values.get({
+        const colA = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
             range: `${SHEET_NAME}!A:A`,
         });
 
-        const firstColumnRows = firstColumnData.data.values || [];
-        const lastDataRow = firstColumnRows.length;
-        const startRow = lastDataRow + 1;
+        const nextRow = (colA.data.values?.length ?? 0) + 1;
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A${startRow}`,
+            range: `${SHEET_NAME}!A${nextRow}`,
             valueInputOption: 'RAW',
-            requestBody: {
-                values: rows,
-            },
+            requestBody: { values: rows },
         });
 
         return NextResponse.json({ result: 'ok' });
