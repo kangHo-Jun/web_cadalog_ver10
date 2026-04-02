@@ -93,7 +93,7 @@ export async function POST(req: Request) {
             spreadsheetId: SPREADSHEET_ID,
             requestBody: {
                 valueInputOption: 'RAW',
-                data: rows.flatMap((row, index) => {
+                data: rows.flatMap((row: string[], index: number) => {
                     const rowNumber = nextRow + index;
                     return [
                         {
