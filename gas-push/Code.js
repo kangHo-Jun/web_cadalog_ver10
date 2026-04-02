@@ -250,6 +250,10 @@ function syncPrices() {
         }
 
         if (unmappedRows.length > 0) {
+            const unmappedSheet = G_SS.getSheetByName('미매핑');
+            if (unmappedSheet && unmappedSheet.getLastRow() > 1) {
+                unmappedSheet.getRange(2, 1, unmappedSheet.getLastRow() - 1, 3).clearContent();
+            }
             writeUnmappedSheet(G_SS, unmappedRows);
             Logger.log(`Step6: 미매핑 ${unmappedRows.length}건 기록`);
             logs.push(`[${now()}] Step6: 미매핑 ${unmappedRows.length}건 기록`);
@@ -684,6 +688,10 @@ function checkNewProducts() {
     }
 
     if (newRows.length > 0) {
+        const unmappedSheet = ss.getSheetByName('미매핑');
+        if (unmappedSheet && unmappedSheet.getLastRow() > 1) {
+            unmappedSheet.getRange(2, 1, unmappedSheet.getLastRow() - 1, 3).clearContent();
+        }
         writeUnmappedSheet(ss, newRows);
         Logger.log(`[checkNewProducts] 미매핑 ${newRows.length}건 기록`);
     }
@@ -1108,6 +1116,22 @@ function writeLog(ss, start, updated, skipped, errors, detail) {
     ]);
 }
 
+function fixMissingSheet() {
+    const ss = SpreadsheetApp.openById('1_T_pl2ItqfmdAsDmrjkg1BBZyQMAVXkUrPMEwhGI6ek');
+    const sheet = ss.getSheetByName('미매핑');
+    if (!sheet) throw new Error('[미매핑] 시트를 찾을 수 없습니다.');
+    const lastRow = sheet.getLastRow();
+    Logger.log('실제 데이터 행 수: ' + lastRow);
+    if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, 3).clearContent();
+    }
+    const maxRows = sheet.getMaxRows();
+    if (maxRows > 10) {
+        sheet.deleteRows(10, maxRows - 10);
+    }
+    Logger.log('정리 완료. 현재 행수: ' + sheet.getMaxRows());
+}
+
 
 // syncPrices 진행 상태 저장
 function getSyncProgress_() {
@@ -1507,5 +1531,3 @@ function installNotifyNewOrderTrigger() {
     .onEdit()
     .create();
 }
-
-
