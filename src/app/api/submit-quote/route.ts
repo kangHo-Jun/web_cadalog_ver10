@@ -75,7 +75,7 @@ export async function POST(req: Request) {
             row[9] = '';                       // J열: 거래처 담당자 빈칸
             row[26] = productNameMap[item.product_code] || item.product_code || ''; // AA열
             row[29] = item.quantity || '';     // AD열
-            row[30] = item.price || '';        // AE열
+            row[30] = Math.round(Number(item.price || 0) / 1.1);  // AE열 (VAT 제외 공급가)
             row[32] = supplyAmount;            // AG열
             row[33] = vatAmount;               // AH열
             row[38] = totalAmount;             // AM열
