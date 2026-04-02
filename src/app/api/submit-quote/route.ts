@@ -82,9 +82,19 @@ export async function POST(req: Request) {
             return row;
         });
 
-        await sheets.spreadsheets.values.append({
+        const dateColumnData = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:AM`,
+            range: `${SHEET_NAME}!F:F`,
+        });
+
+        const dateColumnRows = dateColumnData.data.values || [];
+        const lastDataRow = dateColumnRows.length;
+        const startRow = lastDataRow + 1;
+        const endRow = startRow + rows.length - 1;
+
+        await sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEET_NAME}!A${startRow}:AM${endRow}`,
             valueInputOption: 'RAW',
             requestBody: {
                 values: rows,
