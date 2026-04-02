@@ -158,12 +158,12 @@ function syncPrices() {
         Logger.log('Step5: 가격 변동 감지 및 타겟 업데이트 시작...');
         logs.push(`[${now()}] Step5: 타겟 업데이트 시작`);
 
-        const entries = Object.entries(ecPrices);
+        const entries = Object.entries(cafe24Cache);
         const startIdx = getSyncProgress_();
         Logger.log(`Step5: 진행 시작 인덱스=${startIdx}/${entries.length}`);
 
         for (let i = startIdx; i < entries.length; i++) {
-            const [customCode, ecPrice] = entries[i];
+            const [customCode, cacheEntries] = entries[i];
             if (new Date() - start > TIME_LIMIT_MS) {
                 Logger.log(`시간 제한 접근 (${((new Date() - start) / 1000).toFixed(0)}s) → 진행 상태 저장 후 중단`);
                 logs.push(`[${now()}] 시간 제한으로 중단 (idx 저장)`);
@@ -171,17 +171,15 @@ function syncPrices() {
                 break;
             }
 
-            const priceWithVat = Math.round(ecPrice * 1.1);
-            const cacheEntries = cafe24Cache[customCode];
-
-            if (!cacheEntries || cacheEntries.length === 0) {
-                Logger.log(`미매핑: ${customCode} (카페24 캐시에 없음)`);
-                newMappingRows.push([customCode, '', '', priceWithVat, now(), '미매핑']);
-                const desc = (ecDescriptions && ecDescriptions[customCode]) ? ecDescriptions[customCode] : '';
-                unmappedRows.push([customCode, desc, now()]);
+            const hasEcountPrice = Object.prototype.hasOwnProperty.call(ecPrices, customCode);
+            if (!hasEcountPrice) {
+                unmappedRows.push([customCode, '', now()]);
                 skipped++;
                 continue;
             }
+
+            const ecPrice = ecPrices[customCode];
+            const priceWithVat = Math.round(ecPrice * 1.1);
 
             // 동일 custom_variant_code에 묶인 모든 variant 처리
             for (const { productNo, variantCode, cachedPrice } of cacheEntries) {
@@ -241,19 +239,6 @@ function syncPrices() {
         }
 
         clearSyncProgress_();
-
-        // 기존 미매핑 판단(이카운트 기준) 보존:
-        // for (const [customCode, price] of Object.entries(ecPrices)) {
-        //   if (!cafe24Cache[customCode]) {
-        //     // 미매핑 처리
-        //   }
-        // }
-        unmappedRows.length = 0;
-        for (const [customCode, variants] of Object.entries(cafe24Cache)) {
-            if (Object.prototype.hasOwnProperty.call(ecPrices, customCode)) continue;
-            const firstVariant = Array.isArray(variants) ? (variants[0] || {}) : (variants || {});
-            unmappedRows.push([customCode, String(firstVariant.productNo || ''), now()]);
-        }
 
         // ── Step 6. 매핑테이블 갱신 ──────────────────────────
         if (newMappingRows.length > 0) {
