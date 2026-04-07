@@ -214,7 +214,7 @@ export default function QuoteSummaryPage() {
                 <section className="bg-white rounded-2xl shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-100">
                         <h2 className="font-bold text-gray-800 text-base">연락처 입력</h2>
-                        <p className="text-xs text-gray-400 mt-0.5">견적서를 받을 정보를 입력해 주세요.</p>
+                        <p className="text-xs text-gray-400 mt-0.5">세금계산서 발행 요청시 사업자등록증 첨부, 현금영수증 발급 요청시 번호기재해 주세요.</p>
                     </div>
                     <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -251,7 +251,7 @@ export default function QuoteSummaryPage() {
                             <textarea
                                 value={formData.message}
                                 onChange={(e) => setFormData((p) => ({ ...p, message: e.target.value }))}
-                                placeholder="납기일, 설치 지역 등 추가 정보를 입력해주세요."
+                                placeholder="현금영수증 번호, 납기일, 설치 지역 등 추가 정보를 입력해주세요."
                                 rows={3}
                                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#48BB78]/30 focus:border-[#48BB78] transition-all resize-none"
                             />
