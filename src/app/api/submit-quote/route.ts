@@ -9,7 +9,7 @@ const SPREADSHEET_ID = '1oQN0oApCGHSMHGYf_1gIpF-5dG8ETSsqrx-eAlz394k';
 const SHEET_NAME = '시트1';
 const CAFE24_SHEET_ID = '1_T_pl2ItqfmdAsDmrjkg1BBZyQMAVXkUrPMEwhGI6ek';
 const GMAIL_SENDER = 'zartkang@gmail.com';
-const GMAIL_RECIPIENT = 'zartkang@gmail.com';
+const GMAIL_RECIPIENT = 'rlawkdgh9@gmail.com';
 
 export async function POST(req: Request) {
     try {

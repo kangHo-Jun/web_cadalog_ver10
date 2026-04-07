@@ -172,6 +172,7 @@ const QuoteRequestModal: React.FC<QuoteRequestModalProps> = ({
                     </div>
                     <div>
                         <h3 className="font-semibold text-gray-900 mb-3">고객 정보</h3>
+                        <p className="text-xs text-gray-400 mt-0.5 mb-3">세금계산서 발행 요청 시 사업자등록증 첨부, 현금영수증 발급 요청 시 번호 기재해 주세요.</p>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">이름 / 회사명 <span className="text-red-500">*</span></label>

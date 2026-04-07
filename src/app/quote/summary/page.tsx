@@ -276,7 +276,7 @@ export default function QuoteSummaryPage() {
                 <section className="bg-white rounded-2xl shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-100">
                         <h2 className="font-bold text-gray-800 text-base">연락처 입력</h2>
-                        <p className="text-xs text-gray-400 mt-0.5">세금계산서 발행 요청시 사업자등록증 첨부, 현금영수증 발급 요청시 번호기재해 주세요.</p>
+                        <p className="text-xs text-gray-400 mt-0.5">세금계산서 발행 요청 시 사업자등록증 첨부, 현금영수증 발급 요청 시 번호 기재해 주세요.</p>
                     </div>
                     <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
