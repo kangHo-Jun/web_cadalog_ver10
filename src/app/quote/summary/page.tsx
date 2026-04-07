@@ -1,16 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useCartStore } from '@/store/useCartStore';
 import { toSupplyPrice } from '@/lib/price-utils';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, FileText, Trash2, Send } from 'lucide-react';
+import { ArrowLeft, FileText, Trash2, Send, Upload, Paperclip } from 'lucide-react';
 
 interface QuoteFormData {
     name: string;
     phone: string;
     message: string;
 }
+
+const ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'pdf', 'xlsx', 'xls', 'docx']);
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export default function QuoteSummaryPage() {
     const router = useRouter();
@@ -25,8 +28,60 @@ export default function QuoteSummaryPage() {
         phone: '',
         message: '',
     });
+    const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+    const [fileError, setFileError] = useState('');
+    const [isDragOver, setIsDragOver] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const addFiles = (incomingFiles: FileList | File[]) => {
+        const nextFiles = Array.from(incomingFiles);
+        if (nextFiles.length === 0) return;
+
+        const validFiles: File[] = [];
+
+        for (const file of nextFiles) {
+            const extension = file.name.split('.').pop()?.toLowerCase() || '';
+            if (!ALLOWED_EXTENSIONS.has(extension)) {
+                setFileError('허용되지 않는 파일 형식이 포함되어 있습니다. jpg, jpeg, png, pdf, xlsx, xls, docx 파일만 첨부할 수 있습니다.');
+                continue;
+            }
+            if (file.size > MAX_FILE_SIZE) {
+                setFileError(`파일 크기는 개당 10MB 이하여야 합니다: ${file.name}`);
+                continue;
+            }
+            validFiles.push(file);
+        }
+
+        if (validFiles.length > 0) {
+            setFileError('');
+            setAttachedFiles(prev => {
+                const merged = [...prev];
+                for (const file of validFiles) {
+                    const exists = merged.some(
+                        current =>
+                            current.name === file.name &&
+                            current.size === file.size &&
+                            current.lastModified === file.lastModified
+                    );
+                    if (!exists) merged.push(file);
+                }
+                return merged;
+            });
+        }
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files) addFiles(event.target.files);
+        event.target.value = '';
+    };
+
+    const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDragOver(false);
+        if (event.dataTransfer.files) addFiles(event.dataTransfer.files);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -57,13 +112,18 @@ export default function QuoteSummaryPage() {
 
         console.log('[견적 요청]', quoteData);
 
+        const payload = new FormData();
+        payload.append('name', formData.name);
+        payload.append('phone', formData.phone);
+        payload.append('message', formData.message);
+        payload.append('items', JSON.stringify(quoteData.items));
+        payload.append('totalAmount', String(totalAmount));
+        payload.append('requestDate', quoteData.requestDate);
+        attachedFiles.forEach((file) => payload.append('files', file));
+
         const response = await fetch('/api/submit-quote', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                items: quoteData.items,
-                customer: quoteData.customer,
-            }),
+            body: payload,
         });
 
         if (!response.ok) {
@@ -76,6 +136,8 @@ export default function QuoteSummaryPage() {
 
         setIsSubmitting(false);
         setSubmitted(true);
+        setAttachedFiles([]);
+        setFileError('');
         clearCart();
     };
 
@@ -255,6 +317,77 @@ export default function QuoteSummaryPage() {
                                 rows={3}
                                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#48BB78]/30 focus:border-[#48BB78] transition-all resize-none"
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-xs font-medium text-gray-600">
+                                파일 첨부
+                            </label>
+                            <div
+                                onDragOver={(event) => {
+                                    event.preventDefault();
+                                    setIsDragOver(true);
+                                }}
+                                onDragLeave={() => setIsDragOver(false)}
+                                onDrop={handleDrop}
+                                className={`rounded-xl border-2 border-dashed p-5 transition-colors ${
+                                    isDragOver ? 'border-[#48BB78] bg-[#48BB78]/10' : 'border-gray-300 bg-gray-50'
+                                }`}
+                            >
+                                <div className="flex flex-col items-center justify-center gap-3 text-center">
+                                    <div className="rounded-full bg-white p-3 shadow-sm">
+                                        <Upload className="h-5 w-5 text-[#48BB78]" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-medium text-gray-800">파일을 드래그해서 놓거나 버튼으로 선택하세요.</p>
+                                        <p className="text-xs text-gray-500">허용 형식: jpg, jpeg, png, pdf, xlsx, xls, docx / 개당 최대 10MB</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                                    >
+                                        <Paperclip className="h-4 w-4" />
+                                        파일 추가
+                                    </button>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        multiple
+                                        accept=".jpg,.jpeg,.png,.pdf,.xlsx,.xls,.docx"
+                                        onChange={handleFileChange}
+                                        className="hidden"
+                                    />
+                                </div>
+                            </div>
+
+                            {fileError && (
+                                <p className="text-sm text-red-600">{fileError}</p>
+                            )}
+
+                            {attachedFiles.length > 0 && (
+                                <ul className="space-y-2">
+                                    {attachedFiles.map((file) => (
+                                        <li
+                                            key={`${file.name}-${file.lastModified}-${file.size}`}
+                                            className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-2"
+                                        >
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-medium text-gray-800">{file.name}</p>
+                                                <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAttachedFiles(prev => prev.filter(current => current !== file))}
+                                                className="rounded-md p-2 text-red-500 transition-colors hover:bg-red-50"
+                                                aria-label={`${file.name} 삭제`}
+                                            >
+                                                ×
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                         </div>
 
                         <button
