@@ -494,7 +494,7 @@ export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
         0
     );
 
-    const handleSubmitQuote = async () => {
+    const handleSubmitQuote = async (files: File[]) => {
         if (!formData.name || !formData.email || !formData.phone) {
             alert('필수 정보를 입력해주세요.');
             return;
@@ -513,10 +513,19 @@ export default function QuoteCatalog({ mode = 'quote' }: QuoteCatalogProps) {
             totalAmount,
             requestDate: new Date().toISOString()
         };
+        const payload = new FormData();
+        payload.append('name', formData.name);
+        payload.append('email', formData.email);
+        payload.append('phone', formData.phone);
+        payload.append('message', formData.message);
+        payload.append('items', JSON.stringify(quoteData.items));
+        payload.append('totalAmount', String(totalAmount));
+        payload.append('requestDate', quoteData.requestDate);
+        files.forEach(file => payload.append('files', file));
+
         const response = await fetch('/api/submit-quote', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: quoteData.items }),
+            body: payload,
         });
 
         if (!response.ok) {

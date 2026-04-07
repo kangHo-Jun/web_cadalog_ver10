@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
+import nodemailer from 'nodemailer';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -7,12 +8,39 @@ export const revalidate = 0;
 const SPREADSHEET_ID = '1oQN0oApCGHSMHGYf_1gIpF-5dG8ETSsqrx-eAlz394k';
 const SHEET_NAME = '시트1';
 const CAFE24_SHEET_ID = '1_T_pl2ItqfmdAsDmrjkg1BBZyQMAVXkUrPMEwhGI6ek';
+const GMAIL_SENDER = 'zartkang@gmail.com';
+const GMAIL_RECIPIENT = 'zartkang@gmail.com';
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json();
-        const items = Array.isArray(body?.items) ? body.items : null;
-        const customer = body?.customer || {};
+        const contentType = req.headers.get('content-type') || '';
+        let items: any[] | null = null;
+        let customer: Record<string, string> = {};
+        let uploadedFiles: File[] = [];
+
+        if (contentType.includes('multipart/form-data')) {
+            const formData = await req.formData();
+            const rawItems = formData.get('items');
+            const parsedItems =
+                typeof rawItems === 'string'
+                    ? JSON.parse(rawItems)
+                    : null;
+
+            items = Array.isArray(parsedItems) ? parsedItems : null;
+            customer = {
+                name: typeof formData.get('name') === 'string' ? String(formData.get('name')) : '',
+                email: typeof formData.get('email') === 'string' ? String(formData.get('email')) : '',
+                phone: typeof formData.get('phone') === 'string' ? String(formData.get('phone')) : '',
+                message: typeof formData.get('message') === 'string' ? String(formData.get('message')) : '',
+            };
+            uploadedFiles = formData
+                .getAll('files')
+                .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+        } else {
+            const body = await req.json();
+            items = Array.isArray(body?.items) ? body.items : null;
+            customer = body?.customer || {};
+        }
 
         if (!items) {
             return NextResponse.json(
@@ -25,11 +53,13 @@ export async function POST(req: Request) {
             ?.replace(/\\n/g, '\n')
             ?.replace(/"/g, '');
 
+        const credentials = {
+            client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            private_key: privateKey,
+        };
+
         const auth = new google.auth.GoogleAuth({
-            credentials: {
-                client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-                private_key: privateKey,
-            },
+            credentials,
             scopes: ['https://www.googleapis.com/auth/spreadsheets'],
         });
 
@@ -109,7 +139,39 @@ export async function POST(req: Request) {
             },
         });
 
-        return NextResponse.json({ result: 'ok' });
+        const firstItem = items[0] || {};
+        const firstUnitPrice = Math.round(Number(firstItem.price || 0) / 1.1);
+        const mailText = `[새 견적 요청]
+
+고객명: ${customer.name || ''}
+연락처: ${customer.phone || ''}
+요청사항: ${customer.message || ''}
+단가: ${firstUnitPrice}
+요청일: ${today}`;
+
+        const attachments = await Promise.all(uploadedFiles.map(async (file) => ({
+            filename: file.name,
+            content: Buffer.from(await file.arrayBuffer()),
+            contentType: file.type || 'application/octet-stream',
+        })));
+
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.GMAIL_USER,
+                pass: process.env.GMAIL_APP_PASSWORD,
+            },
+        });
+
+        const mailInfo = await transporter.sendMail({
+            from: GMAIL_SENDER,
+            to: GMAIL_RECIPIENT,
+            subject: `[새 견적 요청] ${customer.name || ''}`,
+            text: mailText,
+            attachments,
+        });
+
+        return NextResponse.json({ result: 'ok', messageId: mailInfo.messageId });
 
     } catch (error: any) {
         console.error('Sheets API error full:', JSON.stringify({

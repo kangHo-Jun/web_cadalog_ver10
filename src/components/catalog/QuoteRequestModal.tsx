@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Minus, Plus, Trash2, Loader2, Send } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Minus, Plus, Trash2, Loader2, Send, Upload, Paperclip } from 'lucide-react';
 
 interface Product {
     product_no: number;
@@ -28,9 +28,12 @@ interface QuoteRequestModalProps {
     setFormData: React.Dispatch<React.SetStateAction<QuoteFormData>>;
     onUpdateCartQuantity: (id: number, delta: number) => void;
     onRemoveFromCart: (id: number) => void;
-    onSubmit: () => Promise<void>;
+    onSubmit: (files: File[]) => Promise<void>;
     isSubmitting: boolean;
 }
+
+const ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'pdf', 'xlsx', 'xls', 'docx']);
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const QuoteRequestModal: React.FC<QuoteRequestModalProps> = ({
     isOpen,
@@ -44,7 +47,64 @@ const QuoteRequestModal: React.FC<QuoteRequestModalProps> = ({
     onSubmit,
     isSubmitting
 }) => {
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+    const [fileError, setFileError] = useState('');
+    const [isDragOver, setIsDragOver] = useState(false);
+
     if (!isOpen) return null;
+
+    const addFiles = (incomingFiles: FileList | File[]) => {
+        const nextFiles = Array.from(incomingFiles);
+        if (nextFiles.length === 0) return;
+
+        const validFiles: File[] = [];
+
+        for (const file of nextFiles) {
+            const extension = file.name.split('.').pop()?.toLowerCase() || '';
+            if (!ALLOWED_EXTENSIONS.has(extension)) {
+                setFileError('허용되지 않는 파일 형식이 포함되어 있습니다. jpg, jpeg, png, pdf, xlsx, xls, docx 파일만 첨부할 수 있습니다.');
+                continue;
+            }
+            if (file.size > MAX_FILE_SIZE) {
+                setFileError(`파일 크기는 개당 10MB 이하여야 합니다: ${file.name}`);
+                continue;
+            }
+            validFiles.push(file);
+        }
+
+        if (validFiles.length > 0) {
+            setFileError('');
+            setAttachedFiles(prev => {
+                const merged = [...prev];
+                for (const file of validFiles) {
+                    const exists = merged.some(
+                        current =>
+                            current.name === file.name &&
+                            current.size === file.size &&
+                            current.lastModified === file.lastModified
+                    );
+                    if (!exists) merged.push(file);
+                }
+                return merged;
+            });
+        }
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files) addFiles(event.target.files);
+        event.target.value = '';
+    };
+
+    const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDragOver(false);
+        if (event.dataTransfer.files) addFiles(event.dataTransfer.files);
+    };
+
+    const handleSubmit = async () => {
+        await onSubmit(attachedFiles);
+    };
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -153,6 +213,69 @@ const QuoteRequestModal: React.FC<QuoteRequestModalProps> = ({
                                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
                                 />
                             </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">파일 첨부</label>
+                                <div
+                                    onDragOver={(event) => {
+                                        event.preventDefault();
+                                        setIsDragOver(true);
+                                    }}
+                                    onDragLeave={() => setIsDragOver(false)}
+                                    onDrop={handleDrop}
+                                    className={`rounded-xl border-2 border-dashed p-5 transition-colors ${
+                                        isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'
+                                    }`}
+                                >
+                                    <div className="flex flex-col items-center justify-center gap-3 text-center">
+                                        <div className="rounded-full bg-white p-3 shadow-sm">
+                                            <Upload className="h-5 w-5 text-blue-600" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-medium text-gray-800">파일을 드래그해서 놓거나 버튼으로 선택하세요.</p>
+                                            <p className="text-xs text-gray-500">허용 형식: jpg, jpeg, png, pdf, xlsx, xls, docx / 개당 최대 10MB</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                                        >
+                                            <Paperclip className="h-4 w-4" />
+                                            파일 추가
+                                        </button>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            multiple
+                                            accept=".jpg,.jpeg,.png,.pdf,.xlsx,.xls,.docx"
+                                            onChange={handleFileChange}
+                                            className="hidden"
+                                        />
+                                    </div>
+                                </div>
+                                {fileError && (
+                                    <p className="mt-2 text-sm text-red-600">{fileError}</p>
+                                )}
+                                {attachedFiles.length > 0 && (
+                                    <ul className="mt-3 space-y-2">
+                                        {attachedFiles.map((file) => (
+                                            <li key={`${file.name}-${file.lastModified}-${file.size}`} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium text-gray-800">{file.name}</p>
+                                                    <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAttachedFiles(prev => prev.filter(current => current !== file))}
+                                                    className="rounded-md p-2 text-red-500 transition-colors hover:bg-red-50"
+                                                    aria-label={`${file.name} 삭제`}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -161,7 +284,7 @@ const QuoteRequestModal: React.FC<QuoteRequestModalProps> = ({
                         취소
                     </button>
                     <button
-                        onClick={onSubmit}
+                        onClick={handleSubmit}
                         disabled={isSubmitting}
                         className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                     >

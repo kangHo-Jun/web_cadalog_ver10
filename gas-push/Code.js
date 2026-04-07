@@ -1514,27 +1514,7 @@ function doPost(e) {
 }
 
 function notifyNewOrder(e) {
-  const sheet = e.source.getActiveSheet();
-  if (sheet.getName() !== '시트1') return;
-
-  const row = e.range.getRow();
-  const col = e.range.getColumn();
-  if (col !== 1) return;
-
-  const data = sheet.getRange(row, 1, 1, 39).getValues()[0];
-  const name = data[0];
-  const phone = data[1];
-  const message = data[2];
-  const date = data[5];
-  const prodName = data[26];
-  const qty = data[29];
-  const price = data[30];
-
-  GmailApp.sendEmail(
-    'zartkang@gmail.com',
-    '[웹카탈로그] 새 견적 요청',
-    `고객명: ${name}\n연락처: ${phone}\n요청사항: ${message}\n\n품목: ${prodName}\n수량: ${qty}\n단가: ${price}\n\n요청일: ${date}`
-  );
+  return;
 }
 
 function installNotifyNewOrderTrigger() {
@@ -1546,9 +1526,5 @@ function installNotifyNewOrderTrigger() {
       ScriptApp.deleteTrigger(trigger);
     }
   }
-
-  ScriptApp.newTrigger('notifyNewOrder')
-    .forSpreadsheet(ss)
-    .onEdit()
-    .create();
+  Logger.log('[installNotifyNewOrderTrigger] notifyNewOrder trigger disabled');
 }
