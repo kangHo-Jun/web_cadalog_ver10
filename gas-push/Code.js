@@ -823,7 +823,7 @@ function buildCafe24Cache() {
             const productCode = String(product.product_code || '');
             const productName = String(product.product_name || '');
             if (!productNo) continue;
-            const variants = fetchProductVariants(mallId, apiVer, productNo);
+            const variants = product.variants || [];
             for (const v of variants) {
                 const customCode = String(v.custom_variant_code || '').trim();
                 if (!customCode) continue;
@@ -854,7 +854,10 @@ function buildCafe24Cache() {
             return !toRemove.has(String(row[3] || '').trim());
         });
         sh.clearContents();
-        if (kept.length > 0) sh.getRange(1, 1, kept.length, header.length).setValues(kept);
+        if (kept.length > 0) {
+            const kept6 = kept.map(row => row.slice(0, header.length));
+            sh.getRange(1, 1, kept6.length, header.length).setValues(kept6);
+        }
     }
 
     // 신규 추가
@@ -871,13 +874,33 @@ function buildCafe24Cache() {
 
 /** 카페24 상품 목록 페이지 조회 (판매함만) */
 function fetchCafe24ProductsPage_(mallId, apiVersion, offset, limit) {
-    const url = `https://${mallId}.cafe24api.com/api/v2/admin/products?limit=${limit}&offset=${offset}&selling=T&fields=product_no,product_code,product_name`;
+    const url = `https://${mallId}.cafe24api.com/api/v2/admin/products?limit=${limit}&offset=${offset}&selling=T&fields=product_no,product_code,product_name,variants&embed=variants`;
     const res = c24Get(url, apiVersion);
     if (!res.ok) {
         Logger.log('상품 목록 조회 오류: ' + res.status + ' ' + res.body.substring(0, 100));
         return null;
     }
     return JSON.parse(res.body).products || [];
+}
+
+function debugCafe24First() {
+    const ss = getSpreadsheet();
+    const cfg = readConfig(ss);
+    G_CFG = cfg;
+    G_SS = ss;
+    initMonitoringSheet_(G_CFG);
+    G_TOKEN = G_CFG[KEY.C24_ACCESS_TOKEN] || '';
+
+    const mallId = cfg[KEY.C24_MALL_ID];
+    const apiVer = cfg[KEY.C24_API_VERSION] || '2025-12-01';
+    const products = fetchCafe24ProductsPage_(mallId, apiVer, 0, 1) || [];
+    const first = products[0] || {};
+    const variants = first.variants;
+    Logger.log('[debugCafe24First] variants: ' + (Array.isArray(variants) ? variants.length + '건' : String(variants)));
+    if (Array.isArray(variants) && variants.length > 0) {
+        Logger.log('[debugCafe24First] first variant keys: ' + Object.keys(variants[0]).join(','));
+        Logger.log('[debugCafe24First] first variant raw: ' + JSON.stringify(variants[0]));
+    }
 }
 
 /** 특정 상품의 variants 조회 — 재시도 포함, 오류 시 스킵 */
