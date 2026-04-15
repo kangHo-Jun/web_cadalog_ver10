@@ -128,8 +128,8 @@ export async function POST(req: Request) {
                     const rowNumber = nextRow + index;
                     return [
                         {
-                            range: `${SHEET_NAME}!A${rowNumber}:I${rowNumber}`,
-                            values: [row.slice(0, 9)],
+                            range: `${SHEET_NAME}!A${rowNumber}:H${rowNumber}`,
+                            values: [row.slice(0, 8)],
                         },
                         {
                             range: `${SHEET_NAME}!K${rowNumber}:Y${rowNumber}`,
