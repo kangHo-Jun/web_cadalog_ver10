@@ -72,7 +72,6 @@ export async function POST(req: Request) {
             day: '2-digit',
         }).replace(/\. /g, '-').replace('.', '');
 
-        // G열 PROD_DES 조회로 변경
         const cafe24Data = await sheets.spreadsheets.values.get({
             spreadsheetId: CAFE24_SHEET_ID,
             range: '카페24상품!A:G',
@@ -88,27 +87,27 @@ export async function POST(req: Request) {
             }
         });
 
-        const rows = items.map((item: any) => {
+        const rows = items.map((item: any, index: number) => {
             const quantity = Number(item.quantity || 0);
-            const price = Number(item.price || 0);
-            const supplyAmount = quantity * price;
-            const vatAmount = Math.round(supplyAmount * 0.1);
-            const totalAmount = supplyAmount + vatAmount;
+            const unitPrice = Math.round(Number(item.price || 0) / 1.1);
 
-            const row = new Array(39).fill('');
-            row[0] = customer.name || '';      // A열
-            row[1] = customer.phone || '';     // B열
-            row[2] = customer.message || '';   // C열
-            row[3] = '3883833';                // D열
-            row[5] = today;                    // F열
-            row[7] = '100';                    // H열: 출하창고
-            row[9] = '';                       // J열: 거래처 담당자 빈칸
-            row[26] = productNameMap[item.product_code] || item.product_code || ''; // AA열
-            row[29] = item.quantity || '';     // AD열
-            row[30] = Math.round(Number(item.price || 0) / 1.1);  // AE열 (VAT 제외 공급가)
-            row[32] = supplyAmount;            // AG열
-            row[33] = vatAmount;               // AH열
-            row[38] = totalAmount;             // AM열
+            const row = new Array(25).fill('');
+            row[0] = index === 0 ? customer.name || '' : '';
+            row[1] = index === 0 ? customer.phone || '' : '';
+            row[2] = index === 0 ? customer.message || '' : '';
+            row[3] = '';
+            row[4] = '3883833';
+            row[5] = '';
+            row[6] = today;
+            row[7] = '100';
+            row[17] = productNameMap[item.product_code] || item.product_code || '';
+            row[18] = '';
+            row[19] = quantity;
+            row[20] = unitPrice;
+            row[21] = row[19] * row[20];
+            row[22] = Math.round(row[21] * 0.1);
+            row[23] = row[21] + row[22];
+            row[24] = '';
             return row;
         });
 
@@ -117,22 +116,24 @@ export async function POST(req: Request) {
             range: `${SHEET_NAME}!A:A`,
         });
 
-        const nextRow = (colA.data.values?.length ?? 0) + 1;
+        const nextRow = (colA.data.values ?? []).reduce((lastRow, value, index) => {
+            return value?.[0] ? index + 1 : lastRow;
+        }, 0) + 1;
 
         await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
             requestBody: {
                 valueInputOption: 'RAW',
-                data: rows.flatMap((row: string[], index: number) => {
+                data: rows.flatMap((row: (string | number)[], index: number) => {
                     const rowNumber = nextRow + index;
                     return [
                         {
-                            range: `${SHEET_NAME}!A${rowNumber}:H${rowNumber}`,
-                            values: [row.slice(0, 8)],
+                            range: `${SHEET_NAME}!A${rowNumber}:I${rowNumber}`,
+                            values: [row.slice(0, 9)],
                         },
                         {
-                            range: `${SHEET_NAME}!K${rowNumber}:AM${rowNumber}`,
-                            values: [row.slice(10)],
+                            range: `${SHEET_NAME}!K${rowNumber}:Y${rowNumber}`,
+                            values: [row.slice(10, 25)],
                         },
                     ];
                 }),
