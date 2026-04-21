@@ -78,12 +78,15 @@ export async function POST(req: Request) {
         });
 
         const cafe24Rows = cafe24Data.data.values || [];
-        const productNameMap: Record<string, string> = {};
+        const productNameMap: Record<string, {prodCd: string, prodDes: string}> = {};
         cafe24Rows.forEach((r) => {
             const variantCode = r[4];       // E열: variant_code
             const customVariantCode = r[3]; // D열: custom_variant_code
             if (variantCode && customVariantCode) {
-                productNameMap[variantCode] = customVariantCode;
+                productNameMap[variantCode] = {
+                    prodCd: customVariantCode,
+                    prodDes: r[6] || '',  // G열 PROD_DES
+                };
             }
         });
 
@@ -100,8 +103,9 @@ export async function POST(req: Request) {
             row[5] = '';
             row[6] = today;
             row[7] = '100';
-            row[17] = productNameMap[item.product_code] || item.product_code || '';
-            row[18] = '';
+            const mapped = productNameMap[item.product_code];
+            row[17] = mapped?.prodCd || item.product_code || '';  // R열 품목코드
+            row[18] = mapped?.prodDes || '';                       // S열 품목명
             row[19] = quantity;
             row[20] = unitPrice;
             row[21] = row[19] * row[20];
