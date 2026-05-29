@@ -4,6 +4,9 @@
 
 const BASE_URL = 'https://web-cadalog-ver10.vercel.app';
 const ALERT_EMAIL = 'zartkang@gmail.com';
+const GAS_PUSH_SPREADSHEET_ID = '1_T_pl2ItqfmdAsDmrjkg1BBZyQMAVXkUrPMEwhGI6ek';
+const AUTO_OK_MS = 75 * 60 * 1000;
+const AUTO_WARN_MS = 120 * 60 * 1000;
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
@@ -34,6 +37,7 @@ function checkAll() {
 
   checkCafe24Token(dashboard);
   checkRedis(dashboard, snapshotData);
+  checkAutoUpdateStatus(dashboard);
   checkVercel(dashboard);
 
   try {
@@ -98,6 +102,61 @@ function checkRedis(sheet, data) {
   }
 }
 
+function checkAutoUpdateStatus(sheet) {
+  try {
+    const ss = SpreadsheetApp.openById(GAS_PUSH_SPREADSHEET_ID);
+    const logSheet = ss.getSheetByName('실행로그');
+    if (!logSheet) throw new Error('[실행로그] 시트 없음');
+
+    const lastRow = logSheet.getLastRow();
+    if (lastRow < 2) throw new Error('실행로그 데이터 없음');
+
+    const startRow = Math.max(2, lastRow - 499);
+    const values = logSheet.getRange(startRow, 1, lastRow - startRow + 1, 6).getValues();
+
+    let latestAutoAt = null;
+    let latestAutoSource = '';
+    for (let i = values.length - 1; i >= 0; i -= 1) {
+      const row = values[i];
+      const rawTime = String(row[0] || '').trim();
+      const source = String(row[1] || '').trim().toUpperCase();
+      if (!rawTime || source !== 'AUTO') continue;
+
+      const dt = parseSeoulDate_(rawTime);
+      if (!dt) continue;
+      latestAutoAt = dt;
+      latestAutoSource = source;
+      break;
+    }
+
+    if (!latestAutoAt) {
+      updateDashboard(sheet, 5, '자동 업데이트 상태', '🔴중단의심', '최근 AUTO 실행 기록 없음', '-');
+      logResult('자동 업데이트 상태', '🔴중단의심', '최근 AUTO 실행 기록 없음');
+      return;
+    }
+
+    const ageMs = Date.now() - latestAutoAt.getTime();
+    let status = '🟢정상';
+    if (ageMs > AUTO_WARN_MS) status = '🔴중단의심';
+    else if (ageMs > AUTO_OK_MS) status = '🟡지연';
+
+    const minutes = Math.floor(ageMs / (1000 * 60));
+    const detail = '최근 AUTO 실행: '
+      + Utilities.formatDate(latestAutoAt, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss')
+      + ' (' + minutes + '분 전)';
+
+    updateDashboard(sheet, 5, '자동 업데이트 상태', status, detail, '-');
+    logResult('자동 업데이트 상태', status, detail);
+
+    if (status === '🔴중단의심') {
+      sendAlert('🚨 [웹카달로그] 자동 업데이트 중단 의심', detail);
+    }
+  } catch (e) {
+    updateDashboard(sheet, 5, '자동 업데이트 상태', '🔴오류', e.message, '-');
+    logResult('자동 업데이트 상태', '🔴오류', e.message);
+  }
+}
+
 function checkVercel(sheet) {
   try {
     const response = UrlFetchApp.fetch(BASE_URL, { muteHttpExceptions: true });
@@ -131,6 +190,13 @@ function logResult(item, status, detail) {
   }
   const now = Utilities.formatDate(new Date(), "GMT+9", "yyyy-MM-dd HH:mm:ss");
   logSheet.appendRow([now, item, status, detail]);
+}
+
+function parseSeoulDate_(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [, y, m, d, hh, mm, ss] = match;
+  return new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss));
 }
 
 function sendAlert(subject, body) {
