@@ -1,8 +1,8 @@
 {
-  "access_token": "Bg9Pp6bCN9HmfJVfmQ3fTG",
-  "expires_at": "2026-03-25T09:12:22.000",
-  "refresh_token": "cTVKyP43OJLlpIfBftHyKN",
-  "refresh_token_expires_at": "2026-04-08T07:12:22.000",
+  "access_token": "NXGDc60RBRQpMwpTHFFBpD",
+  "expires_at": "2026-05-06T16:57:23.000",
+  "refresh_token": "BGleRZKRSa3I1HlpEJ1dtD",
+  "refresh_token_expires_at": "2026-05-20T14:57:23.000",
   "client_id": "5TbJGxFqFBOtlYEXoWL47D",
   "mall_id": "daesan3833",
   "user_id": "daesan3833",
@@ -10,7 +10,7 @@
     "mall.read_product",
     "mall.write_product"
   ],
-  "issued_at": "2026-03-25T07:12:22.000",
+  "issued_at": "2026-05-06T14:57:23.000",
   "shop_no": "1",
   "token_type": "Bearer"
 }

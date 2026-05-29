@@ -52,7 +52,7 @@ export async function GET(req: Request) {
             TOKEN_URL,
             new URLSearchParams({
                 grant_type: 'authorization_code',
-                code,
+                code: code ?? '',
                 redirect_uri: REDIRECT_URI,
             }),
             {
