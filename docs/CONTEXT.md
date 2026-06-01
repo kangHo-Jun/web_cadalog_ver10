@@ -142,4 +142,35 @@
   - 따라서 앞으로는 `Vercel 200`, `Redis 정상`, `토큰 정상`과 별개로 실제 자동 가격 동기화가 멈췄는지를 대시보드에서 따로 식별할 수 있음.
 
 ---
-*Last Updated: 2026-05-29*
+## 2026-06-01 이카운트 OAPI 고정 IP 프록시 구축
+
+### 배경
+이카운트 OAPI IP 화이트리스트 정책 (2026-05-29 적용)
+- 등록된 고정 IP에서만 호출 가능
+- GAS는 고정 IP 없어 직접 호출 불가
+
+### 해결 구조
+GAS → iwinv VPS 프록시(115.68.228.60:3000) → Ecount OAPI
+
+### 구축 내용
+- iwinv.kr 가상서버 (고정 IP: 115.68.228.60)
+- Node.js + Express 프록시 서버
+  - 경로: /opt/ecount-proxy/index.js
+  - 포트: 3000
+  - 인증: x-proxy-key 헤더
+  - PM2로 상시 실행
+- gas-push/Code.js 공통 post() 함수 프록시 경유로 수정
+  (라인 1024 — Login API 포함 모든 Ecount 호출 경유)
+
+### 검증
+- 2026-06-01 14:52 수동 실행 정상
+- 이카운트 10000건 조회 성공
+- 가격 업데이트 12건, 오류 0건
+
+### 관련 파일
+- /opt/ecount-proxy/index.js (iwinv 서버)
+- gas-push/Code.js 라인 1024
+- 문서: 고정IP_오라클.md
+
+---
+*Last Updated: 2026-06-01*

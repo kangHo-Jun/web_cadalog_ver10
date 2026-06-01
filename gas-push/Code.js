@@ -1022,9 +1022,10 @@ function fetchEcountPrices(cfg, sessionId) {
 }
 
 function post(url, payload) {
-    const res = UrlFetchApp.fetch(url, {
+    const res = UrlFetchApp.fetch('http://115.68.228.60:3000/proxy', {
         method: 'POST', contentType: 'application/json',
-        payload: JSON.stringify(payload), muteHttpExceptions: true,
+        headers: { 'x-proxy-key': 'ecount2026proxy' },
+        payload: JSON.stringify({ url: url, body: payload }), muteHttpExceptions: true,
     });
     return JSON.parse(res.getContentText());
 }
