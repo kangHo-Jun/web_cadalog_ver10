@@ -3,6 +3,7 @@
  */
 
 const BASE_URL = 'https://web-cadalog-ver10.vercel.app';
+const VERCEL_URL = 'https://web-cadalog-ver10.vercel.app';
 const ALERT_EMAIL = 'zartkang@gmail.com';
 const GAS_PUSH_SPREADSHEET_ID = '1_T_pl2ItqfmdAsDmrjkg1BBZyQMAVXkUrPMEwhGI6ek';
 const AUTO_OK_MS = 75 * 60 * 1000;
@@ -38,6 +39,9 @@ function checkAll() {
   checkCafe24Token(dashboard);
   checkRedis(dashboard, snapshotData);
   checkAutoUpdateStatus(dashboard);
+  checkCatalogSnapshot(dashboard);
+  checkPriceSyncResult(dashboard);
+  checkPricesApi(dashboard);
   checkVercel(dashboard);
 
   try {
@@ -164,12 +168,74 @@ function checkVercel(sheet) {
     const code = response.getResponseCode();
     const status = code === 200 ? '🟢정상' : '🔴오류';
     const detail = 'HTTP ' + code;
-    updateDashboard(sheet, 8, 'Vercel 배포', status, detail, '-');
+    updateDashboard(sheet, 9, 'Vercel 배포', status, detail, '-');
     logResult('Vercel 배포', status, detail);
   } catch (e) {
-    updateDashboard(sheet, 8, 'Vercel 배포', '🔴오류', e.message, '-');
+    updateDashboard(sheet, 9, 'Vercel 배포', '🔴오류', e.message, '-');
     logResult('Vercel 배포', '🔴오류', e.message);
     sendAlert('🚨 [웹카달로그] Vercel 응답 없음', e.message);
+  }
+}
+
+function checkCatalogSnapshot(sheet) {
+  try {
+    const response = UrlFetchApp.fetch(VERCEL_URL + '/api/debug-snapshot', { muteHttpExceptions: true });
+    const data = JSON.parse(response.getContentText());
+    const snapshotSize = Number(data?.snapshotSize || 0);
+    const status = data?.status === 'OK' && snapshotSize > 0 ? '🟢정상' : '🔴오류';
+    const detail = '상품 ' + snapshotSize + '건 | 응답 ' + (data?.responseTime || '-');
+    updateDashboard(sheet, 6, '카탈로그 스냅샷 상태', status, detail, '-');
+    logResult('카탈로그 스냅샷 상태', status, detail);
+  } catch (e) {
+    updateDashboard(sheet, 6, '카탈로그 스냅샷 상태', '🔴오류', e.message, '-');
+    logResult('카탈로그 스냅샷 상태', '🔴오류', e.message);
+  }
+}
+
+function checkPriceSyncResult(sheet) {
+  try {
+    const ss = SpreadsheetApp.openById(GAS_PUSH_SPREADSHEET_ID);
+    const logSheet = ss.getSheetByName('실행로그');
+    if (!logSheet) throw new Error('[실행로그] 시트 없음');
+
+    const lastRow = logSheet.getLastRow();
+    if (lastRow < 2) throw new Error('실행로그 데이터 없음');
+
+    const row = logSheet.getRange(lastRow, 1, 1, 6).getValues()[0];
+    const executedAt = row[0];
+    const updated = Number(row[2] || 0);
+    const errors = Number(row[4] || 0);
+    const status = errors > 0 ? '🔴오류' : '🟢정상';
+    const timeText = executedAt instanceof Date
+      ? Utilities.formatDate(executedAt, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss')
+      : String(executedAt || '-');
+    const detail = '업데이트:' + updated + ' 오류:' + errors + ' | ' + timeText;
+
+    updateDashboard(sheet, 7, '가격 동기화 결과', status, detail, '-');
+    logResult('가격 동기화 결과', status, detail);
+  } catch (e) {
+    updateDashboard(sheet, 7, '가격 동기화 결과', '🔴오류', e.message, '-');
+    logResult('가격 동기화 결과', '🔴오류', e.message);
+  }
+}
+
+function checkPricesApi(sheet) {
+  try {
+    const response = UrlFetchApp.fetch(VERCEL_URL + '/api/prices', { muteHttpExceptions: true });
+    if (response.getResponseCode() !== 200) {
+      throw new Error('HTTP ' + response.getResponseCode());
+    }
+
+    const data = JSON.parse(response.getContentText());
+    const keyCount = Object.keys(data || {}).filter((key) => !key.startsWith('_')).length;
+    const status = keyCount > 0 ? '🟢정상' : '🔴오류';
+    const detail = '가격 데이터 ' + keyCount + '건';
+
+    updateDashboard(sheet, 8, '가격표 API 상태', status, detail, '-');
+    logResult('가격표 API 상태', status, detail);
+  } catch (e) {
+    updateDashboard(sheet, 8, '가격표 API 상태', '🔴오류', e.message, '-');
+    logResult('가격표 API 상태', '🔴오류', e.message);
   }
 }
 

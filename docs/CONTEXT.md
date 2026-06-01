@@ -173,4 +173,40 @@ GAS → iwinv VPS 프록시(115.68.228.60:3000) → Ecount OAPI
 - 문서: 고정IP_오라클.md
 
 ---
+## 2026-06-01 모니터링 항목 추가
+
+### 추가 배경
+기존 모니터링은 토큰/Redis/Vercel 상태만 확인
+웹 카탈로그, 가격표, 가격 동기화 실제 작동 여부
+직관적으로 확인 불가 → 3개 항목 신규 추가
+
+### 추가된 항목
+
+| 항목 | 함수 | 데이터 소스 |
+|---|---|---|
+| 카탈로그 스냅샷 상태 | checkCatalogSnapshot() | /api/debug-snapshot |
+| 가격 동기화 결과 | checkPriceSyncResult() | gas-push [실행로그] C/E열 |
+| 가격표 API 상태 | checkPricesApi() | /api/prices |
+
+### 대시보드 행 구조 (변경 후)
+1행: Cafe24 Access Token
+2행: Cafe24 Refresh Token
+3행: Redis 연결
+4행: 자동 업데이트 상태
+5행: (예비)
+6행: 카탈로그 스냅샷 상태 ← 신규
+7행: 가격 동기화 결과 ← 신규
+8행: 가격표 API 상태 ← 신규
+9행: Vercel 배포 (기존 8행에서 이동)
+
+### 수정 파일
+- monitoring-gas/Code.js
+  (checkCatalogSnapshot, checkPriceSyncResult, checkPricesApi 추가)
+
+### 주의사항
+- /api/prices 응답 시간 약 4초로 느림
+  muteHttpExceptions + try-catch 처리 적용
+- Vercel 배포 항목이 8행 → 9행으로 이동됨
+
+---
 *Last Updated: 2026-06-01*
