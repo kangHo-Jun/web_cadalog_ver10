@@ -118,11 +118,12 @@ function checkAutoUpdateStatus(sheet) {
     let latestAutoSource = '';
     for (let i = values.length - 1; i >= 0; i -= 1) {
       const row = values[i];
-      const rawTime = String(row[0] || '').trim();
+      const rawTime = row[0];
       const source = String(row[1] || '').trim().toUpperCase();
       if (!rawTime || source !== 'AUTO') continue;
-
-      const dt = parseSeoulDate_(rawTime);
+      const dt = (rawTime instanceof Date && !isNaN(rawTime.getTime()))
+        ? rawTime
+        : parseSeoulDate_(String(rawTime).trim());
       if (!dt) continue;
       latestAutoAt = dt;
       latestAutoSource = source;
@@ -193,10 +194,22 @@ function logResult(item, status, detail) {
 }
 
 function parseSeoulDate_(value) {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  // Date 객체로 이미 파싱된 경우 그대로 반환
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value;
+  }
+  // 문자열 형식 파싱
+  const match = String(value || '').match(
+    /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/
+  );
   if (!match) return null;
   const [, y, m, d, hh, mm, ss] = match;
-  return new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss));
+  return new Date(
+    Date.UTC(
+      Number(y), Number(m) - 1, Number(d),
+      Number(hh) - 9, Number(mm), Number(ss)
+    )
+  );
 }
 
 function sendAlert(subject, body) {
