@@ -32,13 +32,6 @@ type GvizResponse = {
     };
 };
 
-function normalizeHeader(value: string | undefined | null): string {
-    return String(value || '')
-        .toLowerCase()
-        .replace(/\s+/g, '')
-        .replace(/[^a-z0-9_]/g, '');
-}
-
 function extractGvizJson(text: string): GvizResponse {
     const match = text.match(/google\.visualization\.Query\.setResponse\((\{[\s\S]*\})\);/);
     if (!match) {
@@ -47,36 +40,17 @@ function extractGvizJson(text: string): GvizResponse {
     return JSON.parse(match[1]) as GvizResponse;
 }
 
-function findColumnIndex(cols: GvizColumn[], predicate: (label: string, id: string) => boolean): number {
-    for (let i = 0; i < cols.length; i += 1) {
-        const label = normalizeHeader(cols[i]?.label);
-        const id = normalizeHeader(cols[i]?.id);
-        if (predicate(label, id)) return i;
-    }
-    return -1;
-}
-
 function parsePriceMap(response: GvizResponse): PriceMap {
     const cols = response.table?.cols || [];
     const rows = response.table?.rows || [];
 
-    const variantIndex = findColumnIndex(cols, (label, id) =>
-        label === 'variant_code' ||
-        label === 'variantcode' ||
-        id === 'variant_code' ||
-        id === 'variantcode' ||
-        (label.includes('variant') && label.includes('code'))
-    );
+    // The Cafe24 sheet tab starts with data on row 1, so gviz does not expose header labels.
+    // Use fixed columns based on the current A~G layout:
+    // D(index 3)=(1)800액자레일2 style code, F(index 5)=additional amount.
+    const variantIndex = 3;
+    const amountIndex = 5;
 
-    const amountIndex = findColumnIndex(cols, (label, id) =>
-        label === 'additional_amount' ||
-        label === 'additionalamount' ||
-        id === 'additional_amount' ||
-        id === 'additionalamount' ||
-        (label.includes('additional') && label.includes('amount'))
-    );
-
-    if (variantIndex < 0 || amountIndex < 0) {
+    if (cols.length <= amountIndex) {
         throw new Error('Required columns not found in gviz response');
     }
 
