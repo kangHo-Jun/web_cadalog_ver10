@@ -781,11 +781,33 @@ function buildCafe24Cache() {
     }
 
     const existingData = sh.getDataRange().getValues();
-    // custom_variant_code(col D, idx 3) → 행 데이터
+    // custom_variant_code + product_no + variant_code → 행 데이터
+    // 동일 custom_variant_code가 여러 상품/옵션에 존재할 수 있으므로 복합키로 구분한다.
+    const makeRowKey = row => [
+        String(row[3] || '').trim(),
+        String(row[0] || '').trim(),
+        String(row[4] || '').trim(),
+    ].join('\u001f');
+    const normalizeRow = row => [
+        String(row[0] || '').trim(),
+        String(row[1] || '').trim(),
+        String(row[2] || ''),
+        String(row[3] || '').trim(),
+        String(row[4] || '').trim(),
+        parseFloat(String(row[5] || '0').replace(/,/g, '')) || 0,
+    ];
+    const rowsEqual = (left, right) => {
+        const a = normalizeRow(left);
+        const b = normalizeRow(right);
+        return a.every((value, index) => value === b[index]);
+    };
     const existingMap = new Map();
     for (let i = 1; i < existingData.length; i++) {
-        const code = String(existingData[i][3] || '').trim();
-        if (code) existingMap.set(code, existingData[i]);
+        const row = existingData[i];
+        const code = String(row[3] || '').trim();
+        const productNo = String(row[0] || '').trim();
+        const variantCode = String(row[4] || '').trim();
+        if (code && productNo && variantCode) existingMap.set(makeRowKey(row), row);
     }
 
     // API 전체 조회
@@ -805,44 +827,57 @@ function buildCafe24Cache() {
                 if (!customCode) continue;
                 const variantCode = String(v.variant_code || '').trim();
                 const price = parseFloat(String(v.additional_amount || '0').replace(/,/g, '')) || 0;
-                apiMap.set(customCode, [productNo, productCode, productName, customCode, variantCode, price]);
+                const row = [productNo, productCode, productName, customCode, variantCode, price];
+                apiMap.set(makeRowKey(row), row);
             }
         }
         if (products.length < limit) break;
         offset += limit;
     }
 
-    // 비교: 신규 추가 / 삭제
+    // 비교: 신규 추가 / 삭제 / 기존 행의 필드 변경
     const toAdd = [];
-    for (const [code, row] of apiMap) {
-        if (!existingMap.has(code)) toAdd.push(row);
-    }
-
-    const toRemove = new Set();
-    for (const code of existingMap.keys()) {
-        if (!apiMap.has(code)) toRemove.add(code);
-    }
-
-    // 삭제 있으면 시트 재구성
-    if (toRemove.size > 0) {
-        const kept = existingData.filter((row, i) => {
-            if (i === 0) return true; // 헤더 유지
-            return !toRemove.has(String(row[3] || '').trim());
-        });
-        sh.clearContents();
-        if (kept.length > 0) {
-            const kept6 = kept.map(row => row.slice(0, header.length));
-            sh.getRange(1, 1, kept6.length, header.length).setValues(kept6);
+    const toUpdate = [];
+    for (const [key, row] of apiMap) {
+        if (!existingMap.has(key)) {
+            toAdd.push(row);
+        } else if (!rowsEqual(existingMap.get(key), row)) {
+            toUpdate.push(row);
         }
     }
 
-    // 신규 추가
-    if (toAdd.length > 0) {
-        const startRow = sh.getLastRow() + 1;
-        sh.getRange(startRow, 1, toAdd.length, header.length).setValues(toAdd);
+    const toRemove = new Set();
+    for (const key of existingMap.keys()) {
+        if (!apiMap.has(key)) toRemove.add(key);
     }
 
-    Logger.log(`[buildCafe24Cache] ✅ 증분 완료 — 신규 추가 ${toAdd.length}건 / 삭제 ${toRemove.size}건 / 기존 ${existingMap.size}건`);
+    // 변경이 있으면 최신 API 결과로 전체 행을 재구성한다.
+    // G열 PROD_DES가 있으면 custom_variant_code 기준으로 보존한다.
+    if (toAdd.length > 0 || toUpdate.length > 0 || toRemove.size > 0) {
+        const hasDescriptionColumn = existingData.some(row => row.length > header.length);
+        const descriptionByCode = new Map();
+        if (hasDescriptionColumn) {
+            for (let i = 1; i < existingData.length; i++) {
+                const code = String(existingData[i][3] || '').trim();
+                const description = existingData[i][6];
+                if (code && description !== '' && description != null) {
+                    descriptionByCode.set(code, description);
+                }
+            }
+        }
+        const outputHeader = hasDescriptionColumn ? header.concat([existingData[0][6] || '']) : header;
+        const outputRows = Array.from(apiMap.values()).map(row => {
+            if (!hasDescriptionColumn) return row;
+            return row.concat([descriptionByCode.get(String(row[3] || '').trim()) || '']);
+        });
+        sh.clearContents();
+        sh.getRange(1, 1, 1, outputHeader.length).setValues([outputHeader]);
+        if (outputRows.length > 0) {
+            sh.getRange(2, 1, outputRows.length, outputHeader.length).setValues(outputRows);
+        }
+    }
+
+    Logger.log(`[buildCafe24Cache] ✅ 증분 완료 — 신규 추가 ${toAdd.length}건 / 변경 ${toUpdate.length}건 / 삭제 ${toRemove.size}건 / 기존 ${existingMap.size}건`);
 
     // syncPrices one-time 트리거 예약 (10분 후)
     scheduleSyncPricesOnce_(source);
