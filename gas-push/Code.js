@@ -1854,3 +1854,400 @@ function projectWeeklyRows_(input) {
         missingCount: activeKeys.size - recordedCount,
     };
 }
+
+// ════════════════════════════════════════════════════════
+// ■ 주간 가격 이력 GAS 어댑터 / 오케스트레이터
+// ════════════════════════════════════════════════════════
+
+function weeklySnapshotNow_() {
+    return new Date();
+}
+
+function weeklySnapshotError_(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+}
+
+function fetchWeeklyPriceEnvelope_() {
+    const props = PropertiesService.getScriptProperties();
+    const url = props.getProperty('WEEKLY_PRICE_SNAPSHOT_URL');
+    const secret = props.getProperty('WEEKLY_PRICE_SNAPSHOT_SECRET');
+    if (!url) {
+        throw weeklySnapshotError_('MISSING_SNAPSHOT_URL', 'Weekly snapshot URL is not configured.');
+    }
+    if (!secret) {
+        throw weeklySnapshotError_('MISSING_SNAPSHOT_SECRET', 'Weekly snapshot secret is not configured.');
+    }
+
+    let response;
+    try {
+        response = UrlFetchApp.fetch(url, {
+            method: 'get',
+            headers: { Authorization: 'Bearer ' + secret },
+            muteHttpExceptions: true,
+            followRedirects: false,
+            validateHttpsCertificates: true,
+            timeoutSeconds: 30,
+        });
+    } catch (error) {
+        throw weeklySnapshotError_('SNAPSHOT_FETCH_FAILED', 'Weekly snapshot fetch failed.');
+    }
+
+    const status = response.getResponseCode();
+    if (status !== 200) {
+        const code = status === 401
+            ? 'SNAPSHOT_UNAUTHORIZED'
+            : status === 429
+                ? 'SNAPSHOT_RATE_LIMITED'
+                : status >= 500
+                    ? 'SNAPSHOT_UPSTREAM_FAILED'
+                    : 'SNAPSHOT_HTTP_ERROR';
+        throw weeklySnapshotError_(code, 'Weekly snapshot returned HTTP ' + status + '.');
+    }
+
+    const body = response.getContentText();
+    if (typeof body !== 'string' || body.length > 5 * 1024 * 1024) {
+        throw weeklySnapshotError_('SNAPSHOT_RESPONSE_TOO_LARGE', 'Weekly snapshot response is invalid.');
+    }
+    let envelope;
+    try {
+        envelope = JSON.parse(body);
+    } catch (error) {
+        throw weeklySnapshotError_('SNAPSHOT_INVALID_JSON', 'Weekly snapshot response is not valid JSON.');
+    }
+    if (!envelope || envelope.schemaVersion !== 2) {
+        throw weeklySnapshotError_('SNAPSHOT_INVALID_SCHEMA', 'Weekly snapshot must use schema version 2.');
+    }
+    return envelope;
+}
+
+function readWeeklyPriceMapping_(spreadsheet) {
+    const sheet = spreadsheet.getSheetByName('카페24상품');
+    if (!sheet) {
+        throw weeklySnapshotError_('MAPPING_SHEET_MISSING', 'The Cafe24 product mapping sheet is missing.');
+    }
+    const values = sheet.getDataRange().getValues();
+    const rows = [];
+    const seenKeys = new Set();
+    for (let index = 1; index < values.length; index++) {
+        const source = values[index] || [];
+        const productNo = String(source[0] === undefined || source[0] === null ? '' : source[0]).trim();
+        const productName = String(source[2] === undefined || source[2] === null ? '' : source[2]).trim();
+        const prodCd = String(source[3] === undefined || source[3] === null ? '' : source[3]).trim();
+        const variantCode = String(source[4] === undefined || source[4] === null ? '' : source[4]).trim();
+        let reason = '';
+        if (!/^[1-9]\d*$/.test(productNo)) reason = 'MISSING_PRODUCT_NO';
+        else if (!prodCd) reason = 'MISSING_CUSTOM_VARIANT_CODE';
+        else if (!variantCode) reason = 'MISSING_VARIANT_IDENTITY';
+        const stableKey = reason ? '' : productNo + ':' + variantCode;
+        if (!reason && seenKeys.has(stableKey)) reason = 'DUPLICATE_STABLE_KEY';
+        if (reason) {
+            Logger.log('[snapshotWeeklyPrice] code=MAPPING_ROW_EXCLUDED row=' + (index + 1) +
+                ' reason=' + reason + ' productNo=' + (productNo || '-') + ' prodCd=' + (prodCd || '-'));
+            continue;
+        }
+        seenKeys.add(stableKey);
+        rows.push({ prodCd, productName, stableKey });
+    }
+    return rows;
+}
+
+function weeklyPricesByKey_(envelope) {
+    const prices = {};
+    Object.values(envelope.groups || {}).forEach(group => {
+        (group.children || []).forEach(child => {
+            if (!child || typeof child !== 'object') return;
+            const suffix = child.isSingle === true ? 'SINGLE' : child.variantCode;
+            prices[String(child.productNo) + ':' + suffix] = child.price;
+        });
+    });
+    return prices;
+}
+
+function weeklyMetadataKey_(weekKey) {
+    return 'WEEKLY_PRICE_SNAPSHOT:' + weekKey;
+}
+
+function readWeeklyMetadata_(sheet, weekKey) {
+    if (!sheet) return null;
+    const found = sheet.createDeveloperMetadataFinder().withKey(weeklyMetadataKey_(weekKey)).find();
+    if (!found || found.length === 0) return null;
+    let value;
+    try {
+        value = JSON.parse(found[0].getValue());
+    } catch (error) {
+        throw weeklySnapshotError_('INVALID_WEEK_METADATA', 'Weekly snapshot metadata is malformed.');
+    }
+    if (!value || typeof value.firstWrittenAt !== 'string' || typeof value.state !== 'string') {
+        throw weeklySnapshotError_('INVALID_WEEK_METADATA', 'Weekly snapshot metadata is incomplete.');
+    }
+    return { firstWrittenAt: value.firstWrittenAt, state: value.state };
+}
+
+function readWeeklyHistoryState_(sheet, weekKey) {
+    if (!sheet) {
+        return {
+            exists: false,
+            lastColumn: 0,
+            weekColumn: 0,
+            rows: [],
+            weekValues: [],
+            metadata: null,
+        };
+    }
+    const lastRow = sheet.getLastRow();
+    const lastColumn = sheet.getLastColumn();
+    const values = lastRow > 0 && lastColumn > 0
+        ? sheet.getRange(1, 1, lastRow, lastColumn).getValues()
+        : [];
+    const headers = values[0] || [];
+    const weekColumn = headers.indexOf(weekKey) + 1;
+    const metadata = readWeeklyMetadata_(sheet, weekKey);
+    if (weekColumn > 0 && !metadata) {
+        throw weeklySnapshotError_('UNTRACKED_WEEK_COLUMN', 'Weekly price column exists without metadata.');
+    }
+    if (metadata && weekColumn === 0) {
+        throw weeklySnapshotError_('MISSING_WEEK_COLUMN', 'Weekly snapshot metadata exists without a price column.');
+    }
+    const rows = values.slice(1).map(row => [row[0] || '', row[1] || '', row[2] || '']);
+    const weekValues = weekColumn > 0
+        ? values.slice(1).map(row => row[weekColumn - 1] === undefined || row[weekColumn - 1] === null ? '' : row[weekColumn - 1])
+        : rows.map(() => '');
+    return { exists: true, lastColumn, weekColumn, rows, weekValues, metadata };
+}
+
+function makeWeeklyMetadataValue_(firstWrittenAt, state) {
+    return JSON.stringify({ firstWrittenAt, state });
+}
+
+function freezeWeeklyWritePlan_(value) {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+    Object.keys(value).forEach(key => freezeWeeklyWritePlan_(value[key]));
+    return Object.freeze(value);
+}
+
+function validateWeeklyWritePlan_(plan) {
+    if (!plan || !plan.kind || !plan.metadataKey || !plan.metadataValue) {
+        throw weeklySnapshotError_('INVALID_WRITE_PLAN', 'Weekly write plan is incomplete.');
+    }
+    if (plan.kind === 'CREATE_WEEK') {
+        if (!Number.isInteger(plan.weekColumn) || plan.weekColumn < 4 ||
+            !Array.isArray(plan.rows) || !Array.isArray(plan.weekValues) ||
+            plan.rows.length !== plan.weekValues.length) {
+            throw weeklySnapshotError_('INVALID_WRITE_PLAN', 'Weekly create plan is invalid.');
+        }
+    } else if (plan.kind === 'SUPPLEMENT') {
+        const seenPriceRows = new Set();
+        (plan.priceWrites || []).forEach(write => {
+            if (!Number.isInteger(write.rowIndex) || write.rowIndex < 0 || seenPriceRows.has(write.rowIndex) ||
+                (plan.existingWeekValues[write.rowIndex] !== '' &&
+                 plan.existingWeekValues[write.rowIndex] !== null &&
+                 plan.existingWeekValues[write.rowIndex] !== undefined)) {
+                throw weeklySnapshotError_('UNSAFE_PRICE_WRITE', 'Weekly supplement plan would overwrite a price.');
+            }
+            seenPriceRows.add(write.rowIndex);
+        });
+    } else if (plan.kind !== 'METADATA_ONLY') {
+        throw weeklySnapshotError_('INVALID_WRITE_PLAN', 'Weekly write plan kind is invalid.');
+    }
+    return freezeWeeklyWritePlan_(plan);
+}
+
+function groupWeeklyWrites_(writes, valueSelector) {
+    const sorted = (writes || []).slice().sort((left, right) => left.rowIndex - right.rowIndex);
+    const groups = [];
+    sorted.forEach(write => {
+        const values = valueSelector(write);
+        const last = groups[groups.length - 1];
+        if (last && last.startRowIndex + last.values.length === write.rowIndex) {
+            last.values.push(values);
+        } else {
+            groups.push({ startRowIndex: write.rowIndex, values: [values] });
+        }
+    });
+    return groups;
+}
+
+function writeWeeklyMetadata_(sheet, key, value) {
+    const found = sheet.createDeveloperMetadataFinder().withKey(key).find();
+    if (found && found.length > 0) found[0].setValue(value);
+    else sheet.addDeveloperMetadata(key, value);
+}
+
+function executeWeeklyWritePlan_(spreadsheet, existingSheet, plan) {
+    let sheet = existingSheet;
+    if (plan.kind === 'CREATE_WEEK') {
+        if (!sheet) sheet = spreadsheet.insertSheet('가격이력');
+        const metadataRows = [['PROD_CD', '웹카탈로그 상품명', '상품키']].concat(plan.rows);
+        sheet.getRange(1, 1, metadataRows.length, 3).setValues(metadataRows);
+        const weekColumnValues = [[plan.weekKey]].concat(plan.weekValues.map(value => [value]));
+        sheet.getRange(1, plan.weekColumn, weekColumnValues.length, 1).setValues(weekColumnValues);
+        if (plan.hideColumnC) sheet.hideColumns(3);
+    } else if (plan.kind === 'SUPPLEMENT') {
+        groupWeeklyWrites_(plan.rowWrites, write => write.values.slice())
+            .forEach(group => sheet.getRange(group.startRowIndex + 2, 1, group.values.length, 3).setValues(group.values));
+        groupWeeklyWrites_(plan.nameWrites, write => [write.value])
+            .forEach(group => sheet.getRange(group.startRowIndex + 2, 2, group.values.length, 1).setValues(group.values));
+        groupWeeklyWrites_(plan.priceWrites, write => [write.value])
+            .forEach(group => sheet.getRange(group.startRowIndex + 2, plan.weekColumn, group.values.length, 1).setValues(group.values));
+    }
+    writeWeeklyMetadata_(sheet, plan.metadataKey, plan.metadataValue);
+}
+
+function weeklySnapshotSummary_(input) {
+    return {
+        weekKey: input.weekKey || null,
+        runResult: input.runResult,
+        snapshotState: input.snapshotState || null,
+        targetCount: Number(input.targetCount) || 0,
+        recordedCount: Number(input.recordedCount) || 0,
+        missingCount: Number(input.missingCount) || 0,
+        generatedAt: input.generatedAt || null,
+        coveragePct: Number(input.coveragePct) || 0,
+    };
+}
+
+function logWeeklySnapshotSummary_(summary, code) {
+    Logger.log('[snapshotWeeklyPrice] code=' + code +
+        ' weekKey=' + (summary.weekKey || '-') +
+        ' runResult=' + summary.runResult +
+        ' snapshotState=' + (summary.snapshotState || '-') +
+        ' targetCount=' + summary.targetCount +
+        ' recordedCount=' + summary.recordedCount +
+        ' missingCount=' + summary.missingCount +
+        ' generatedAt=' + (summary.generatedAt || '-') +
+        ' coveragePct=' + summary.coveragePct);
+}
+
+function snapshotWeeklyPrice() {
+    const lock = LockService.getScriptLock();
+    let acquired = false;
+    try {
+        acquired = lock.tryLock(1000);
+    } catch (error) {
+        acquired = false;
+    }
+    if (!acquired) {
+        const lockedSummary = weeklySnapshotSummary_({ runResult: 'FAILED' });
+        logWeeklySnapshotSummary_(lockedSummary, 'LOCK_NOT_ACQUIRED');
+        return lockedSummary;
+    }
+
+    let weekKey = null;
+    let envelope = null;
+    let validation = null;
+    try {
+        const runAt = weeklySnapshotNow_();
+        weekKey = makeWeeklyPriceKey_(runAt);
+        envelope = fetchWeeklyPriceEnvelope_();
+        const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+        const mappingRows = readWeeklyPriceMapping_(spreadsheet);
+        validation = validateWeeklyEnvelope_(envelope, mappingRows, runAt);
+        if (!validation.ok) {
+            throw weeklySnapshotError_(validation.code, validation.message);
+        }
+
+        const historySheet = spreadsheet.getSheetByName('가격이력');
+        const history = readWeeklyHistoryState_(historySheet, weekKey);
+        if (history.metadata && history.metadata.state === 'CREATED_COMPLETE') {
+            const skippedComplete = weeklySnapshotSummary_({
+                weekKey,
+                runResult: 'SKIPPED',
+                snapshotState: 'CREATED_COMPLETE',
+                targetCount: validation.targetCount,
+                recordedCount: validation.targetCount,
+                missingCount: 0,
+                generatedAt: validation.generatedAt,
+                coveragePct: validation.coveragePct,
+            });
+            logWeeklySnapshotSummary_(skippedComplete, 'COMPLETE_WEEK_EXISTS');
+            return skippedComplete;
+        }
+
+        const projection = projectWeeklyRows_({
+            existingRows: history.rows,
+            existingWeekValues: history.weekValues,
+            mappingRows,
+            pricesByKey: weeklyPricesByKey_(envelope),
+        });
+        const classified = classifyWeeklySnapshotState_({
+            existingState: history.metadata ? history.metadata.state : null,
+            firstWrittenAt: history.metadata ? history.metadata.firstWrittenAt : null,
+            targetCount: validation.targetCount,
+            missingCount: projection.missingCount,
+            runAt,
+        });
+        if (classified.runResult === 'FAILED') {
+            throw weeklySnapshotError_('MISSING_RATE_TOO_HIGH', 'Weekly snapshot missing rate exceeds five percent.');
+        }
+
+        const firstWrittenAt = history.metadata ? history.metadata.firstWrittenAt : runAt.toISOString();
+        const metadataKey = weeklyMetadataKey_(weekKey);
+        const metadataValue = makeWeeklyMetadataValue_(firstWrittenAt, classified.snapshotState);
+        let plan;
+        if (classified.runResult === 'CREATED') {
+            plan = {
+                kind: 'CREATE_WEEK',
+                weekKey,
+                weekColumn: Math.max(4, history.lastColumn + 1),
+                rows: projection.rows.map(row => row.slice()),
+                weekValues: projection.weekValues.slice(),
+                hideColumnC: !history.exists,
+                metadataKey,
+                metadataValue,
+            };
+        } else if (classified.runResult === 'SUPPLEMENTED') {
+            plan = {
+                kind: 'SUPPLEMENT',
+                weekKey,
+                weekColumn: history.weekColumn,
+                existingWeekValues: history.weekValues.slice(),
+                rowWrites: projection.rowWrites.map(write => ({ rowIndex: write.rowIndex, values: write.values.slice() })),
+                nameWrites: projection.nameWrites.map(write => ({ rowIndex: write.rowIndex, value: write.value })),
+                priceWrites: projection.priceWrites.map(write => ({ rowIndex: write.rowIndex, value: write.value })),
+                metadataKey,
+                metadataValue,
+            };
+        } else {
+            plan = { kind: 'METADATA_ONLY', metadataKey, metadataValue };
+        }
+        const immutablePlan = validateWeeklyWritePlan_(plan);
+        executeWeeklyWritePlan_(spreadsheet, historySheet, immutablePlan);
+
+        const summary = weeklySnapshotSummary_({
+            weekKey,
+            runResult: classified.runResult,
+            snapshotState: classified.snapshotState,
+            targetCount: validation.targetCount,
+            recordedCount: projection.recordedCount,
+            missingCount: projection.missingCount,
+            generatedAt: validation.generatedAt,
+            coveragePct: validation.coveragePct,
+        });
+        logWeeklySnapshotSummary_(summary, classified.snapshotState);
+        return summary;
+    } catch (error) {
+        const targetCount = validation ? validation.targetCount : 0;
+        const recordedCount = validation ? validation.matchedCount : 0;
+        const coveragePct = validation && Number.isFinite(validation.coveragePct)
+            ? validation.coveragePct
+            : targetCount > 0 ? recordedCount / targetCount * 100 : 0;
+        const failedSummary = weeklySnapshotSummary_({
+            weekKey,
+            runResult: 'FAILED',
+            snapshotState: null,
+            targetCount,
+            recordedCount,
+            missingCount: Math.max(0, targetCount - recordedCount),
+            generatedAt: validation && validation.generatedAt
+                ? validation.generatedAt
+                : envelope && typeof envelope.generatedAt === 'string' ? envelope.generatedAt : null,
+            coveragePct,
+        });
+        logWeeklySnapshotSummary_(failedSummary, error && error.code ? error.code : 'UNEXPECTED_ERROR');
+        return failedSummary;
+    } finally {
+        lock.releaseLock();
+    }
+}
