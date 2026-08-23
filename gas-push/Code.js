@@ -1577,3 +1577,265 @@ function installNotifyNewOrderTrigger() {
   }
   Logger.log('[installNotifyNewOrderTrigger] notifyNewOrder trigger disabled');
 }
+
+// ════════════════════════════════════════════════════════
+// ■ 주간 가격 이력 순수 도메인 함수
+// ════════════════════════════════════════════════════════
+
+function makeWeeklyPriceKey_(runAt) {
+    const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const kstDate = new Date(runAt.getTime() + KST_OFFSET_MS);
+    const daysSinceCompletedSunday = kstDate.getUTCDay() || 7;
+    const completedSunday = new Date(Date.UTC(
+        kstDate.getUTCFullYear(),
+        kstDate.getUTCMonth(),
+        kstDate.getUTCDate() - daysSinceCompletedSunday
+    ));
+    const completedMonday = new Date(completedSunday.getTime() - 6 * DAY_MS);
+    const pad = value => String(value).padStart(2, '0');
+    const monday = `${completedMonday.getUTCFullYear()}-${pad(completedMonday.getUTCMonth() + 1)}-${pad(completedMonday.getUTCDate())}`;
+    const sunday = `${pad(completedSunday.getUTCMonth() + 1)}-${pad(completedSunday.getUTCDate())}`;
+    return `${monday}~${sunday}(일)`;
+}
+
+function toSupplyPrice_(vatIncluded) {
+    return Math.round(vatIncluded / 1.1);
+}
+
+function validateWeeklyEnvelope_(envelope, mappingRows, runAt) {
+    const targetKeys = new Set();
+    mappingRows.forEach(row => {
+        if (row && typeof row.stableKey === 'string') {
+            const stableKey = row.stableKey.trim();
+            if (/^[1-9]\d*:\S+$/.test(stableKey)) targetKeys.add(stableKey);
+        }
+    });
+    const targetCount = targetKeys.size;
+
+    if (!envelope || envelope.schemaVersion !== 2 || !envelope.groups || typeof envelope.groups !== 'object') {
+        return {
+            ok: false,
+            code: 'INVALID_SCHEMA',
+            message: 'Catalog snapshot must use schema version 2.',
+            targetCount,
+            matchedCount: 0,
+        };
+    }
+    const groups = Object.values(envelope.groups);
+    if (groups.some(group => !group || !Array.isArray(group.children))) {
+        return {
+            ok: false,
+            code: 'INVALID_SCHEMA',
+            message: 'Catalog snapshot groups must contain child arrays.',
+            targetCount,
+            matchedCount: 0,
+        };
+    }
+
+    const snapshotKeys = new Set();
+    let duplicateStableKey = '';
+    let hasInvalidPrice = false;
+    let hasInvalidStableKey = false;
+    groups.forEach(group => {
+        group.children.forEach(child => {
+            if (!Number.isFinite(child.price) || child.price <= 0) hasInvalidPrice = true;
+            const hasProductNo = Number.isFinite(Number(child.productNo)) && Number(child.productNo) > 0;
+            const hasVariantCode = typeof child.variantCode === 'string' && child.variantCode.trim() !== '';
+            if (!hasProductNo || (child.isSingle !== true && !hasVariantCode)) {
+                hasInvalidStableKey = true;
+                return;
+            }
+            const suffix = child.isSingle === true ? 'SINGLE' : child.variantCode;
+            const stableKey = `${child.productNo}:${suffix}`;
+            if (snapshotKeys.has(stableKey)) duplicateStableKey = stableKey;
+            snapshotKeys.add(stableKey);
+        });
+    });
+
+    if (hasInvalidPrice) {
+        return {
+            ok: false,
+            code: 'INVALID_PRICE',
+            message: 'Catalog snapshot prices must be positive finite numbers.',
+            targetCount,
+            matchedCount: 0,
+        };
+    }
+    if (hasInvalidStableKey) {
+        return {
+            ok: false,
+            code: 'INVALID_STABLE_KEY',
+            message: 'Catalog snapshot child is missing stable identity metadata.',
+            targetCount,
+            matchedCount: 0,
+        };
+    }
+
+    if (duplicateStableKey) {
+        return {
+            ok: false,
+            code: 'DUPLICATE_STABLE_KEY',
+            message: `Catalog snapshot contains duplicate stable key ${duplicateStableKey}.`,
+            targetCount,
+            matchedCount: 0,
+        };
+    }
+    if (targetCount === 0) {
+        return {
+            ok: false,
+            code: 'EMPTY_MAPPING',
+            message: 'No valid unique mapping keys were provided.',
+            targetCount: 0,
+            matchedCount: 0,
+        };
+    }
+
+    let matchedCount = 0;
+    targetKeys.forEach(key => {
+        if (snapshotKeys.has(key)) matchedCount++;
+    });
+    const generatedAt = envelope.generatedAt;
+    const ageMs = runAt.getTime() - new Date(generatedAt).getTime();
+    const coveragePct = matchedCount / targetCount * 100;
+
+    if (typeof generatedAt !== 'string' || !Number.isFinite(new Date(generatedAt).getTime())) {
+        return {
+            ok: false,
+            code: 'INVALID_GENERATED_AT',
+            message: 'Catalog snapshot generatedAt must be a valid timestamp.',
+            targetCount,
+            matchedCount,
+        };
+    }
+    if (ageMs < 0) {
+        return {
+            ok: false,
+            code: 'FUTURE_SNAPSHOT',
+            message: 'Catalog snapshot generatedAt is in the future.',
+            targetCount,
+            matchedCount,
+        };
+    }
+
+    if (ageMs > 24 * 60 * 60 * 1000) {
+        return {
+            ok: false,
+            code: 'STALE_SNAPSHOT',
+            message: 'Catalog snapshot is older than 24 hours.',
+            targetCount,
+            matchedCount,
+        };
+    }
+    if (coveragePct < 95) {
+        return {
+            ok: false,
+            code: 'LOW_COVERAGE',
+            message: 'Catalog snapshot covers less than 95 percent of mapping targets.',
+            targetCount,
+            matchedCount,
+        };
+    }
+
+    return { ok: true, generatedAt, ageMs, coveragePct, targetCount, matchedCount };
+}
+
+function classifyWeeklySnapshotState_(input) {
+    const targetCount = Number(input.targetCount);
+    const missingCount = Number(input.missingCount);
+    if (!Number.isFinite(targetCount) || targetCount <= 0 ||
+        !Number.isFinite(missingCount) || missingCount < 0 || missingCount > targetCount ||
+        missingCount / targetCount * 100 > 5) {
+        return { runResult: 'FAILED', snapshotState: null };
+    }
+
+    if (!input.existingState) {
+        return missingCount === 0
+            ? { runResult: 'CREATED', snapshotState: 'CREATED_COMPLETE' }
+            : { runResult: 'CREATED', snapshotState: 'CREATED_PARTIAL' };
+    }
+
+    if (input.existingState === 'CREATED_PARTIAL') {
+        const supplementAgeMs = new Date(input.runAt).getTime() - new Date(input.firstWrittenAt).getTime();
+        if (!Number.isFinite(supplementAgeMs) || supplementAgeMs < 0) {
+            return { runResult: 'FAILED', snapshotState: null };
+        }
+        if (supplementAgeMs > 24 * 60 * 60 * 1000) {
+            return { runResult: 'SKIPPED', snapshotState: 'LOCKED_PARTIAL' };
+        }
+        return missingCount === 0
+            ? { runResult: 'SUPPLEMENTED', snapshotState: 'CREATED_COMPLETE' }
+            : { runResult: 'SUPPLEMENTED', snapshotState: 'CREATED_PARTIAL' };
+    }
+
+    if (input.existingState === 'LOCKED_PARTIAL') {
+        return { runResult: 'SKIPPED', snapshotState: 'LOCKED_PARTIAL' };
+    }
+
+    return { runResult: 'FAILED', snapshotState: null };
+}
+
+function projectWeeklyRows_(input) {
+    const rows = (input.existingRows || []).map(row => [row[0], row[1], row[2]]);
+    const weekValues = rows.map((_, index) => {
+        const value = (input.existingWeekValues || [])[index];
+        return value === undefined || value === null ? '' : value;
+    });
+    const nameWrites = [];
+    const rowWrites = [];
+    const priceWrites = [];
+    const rowIndexByKey = new Map();
+    rows.forEach((row, index) => {
+        const key = typeof row[2] === 'string' ? row[2].trim() : '';
+        if (key && !rowIndexByKey.has(key)) rowIndexByKey.set(key, index);
+    });
+
+    const activeKeys = new Set();
+    (input.mappingRows || []).forEach(mappingRow => {
+        if (!mappingRow || typeof mappingRow.stableKey !== 'string') return;
+        const stableKey = mappingRow.stableKey.trim();
+        if (!stableKey || activeKeys.has(stableKey)) return;
+        activeKeys.add(stableKey);
+
+        let rowIndex = rowIndexByKey.get(stableKey);
+        if (rowIndex === undefined) {
+            rowIndex = rows.length;
+            const values = [mappingRow.prodCd || '', mappingRow.productName || '', stableKey];
+            rows.push(values.slice());
+            weekValues.push('');
+            rowIndexByKey.set(stableKey, rowIndex);
+            rowWrites.push({ rowIndex, values });
+        } else {
+            const nextName = mappingRow.productName || '';
+            if (rows[rowIndex][1] !== nextName) {
+                rows[rowIndex][1] = nextName;
+                nameWrites.push({ rowIndex, value: nextName });
+            }
+        }
+
+        const existingValue = weekValues[rowIndex];
+        const isBlank = existingValue === '' || existingValue === null || existingValue === undefined;
+        const vatIncluded = input.pricesByKey && input.pricesByKey[stableKey];
+        if (isBlank && Number.isFinite(vatIncluded) && vatIncluded > 0) {
+            const supplyPrice = toSupplyPrice_(vatIncluded);
+            weekValues[rowIndex] = supplyPrice;
+            priceWrites.push({ rowIndex, value: supplyPrice });
+        }
+    });
+
+    let recordedCount = 0;
+    activeKeys.forEach(stableKey => {
+        const value = weekValues[rowIndexByKey.get(stableKey)];
+        if (value !== '' && value !== null && value !== undefined) recordedCount++;
+    });
+
+    return {
+        rows,
+        weekValues,
+        nameWrites,
+        rowWrites,
+        priceWrites,
+        recordedCount,
+        missingCount: activeKeys.size - recordedCount,
+    };
+}
