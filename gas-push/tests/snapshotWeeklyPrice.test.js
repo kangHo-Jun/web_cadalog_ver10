@@ -319,9 +319,10 @@ function envelopeFor(now, matchedCount, options = {}) {
   return envelope;
 }
 
-function createSheetFake(initialValues, mutations, initialMetadata) {
+function createSheetFake(initialValues, mutations, initialMetadata, afterMutation = () => {}) {
   let values = (initialValues || []).map(row => row.slice());
   const metadata = new Map(Object.entries(initialMetadata || {}));
+  const hiddenColumns = new Set();
   const padTo = (rowCount, columnCount) => {
     while (values.length < rowCount) values.push([]);
     values.forEach(row => { while (row.length < columnCount) row.push(''); });
@@ -346,7 +347,13 @@ function createSheetFake(initialValues, mutations, initialMetadata) {
     setValue: value => {
       metadata.set(key, value);
       mutations.push({ type: 'metadata-set', key, value });
+      afterMutation('metadata-set');
       return metadataRecord(key);
+    },
+    remove: () => {
+      metadata.delete(key);
+      mutations.push({ type: 'metadata-remove', key });
+      afterMutation('metadata-remove');
     },
   });
   const sheet = {
@@ -376,9 +383,20 @@ function createSheetFake(initialValues, mutations, initialMetadata) {
           type: 'setValues', row, column, rowCount, columnCount,
           values: nextValues.map(nextRow => nextRow.slice()),
         });
+        afterMutation('setValues');
       },
     }),
-    hideColumns: column => mutations.push({ type: 'hideColumns', column }),
+    hideColumns: column => {
+      hiddenColumns.add(column);
+      mutations.push({ type: 'hideColumns', column });
+      afterMutation('hideColumns');
+    },
+    showColumns: column => {
+      hiddenColumns.delete(column);
+      mutations.push({ type: 'showColumns', column });
+      afterMutation('showColumns');
+    },
+    isColumnHiddenByUser: column => hiddenColumns.has(column),
     createDeveloperMetadataFinder: () => {
       let selectedKey = '';
       return {
@@ -389,9 +407,15 @@ function createSheetFake(initialValues, mutations, initialMetadata) {
     addDeveloperMetadata: (key, value) => {
       metadata.set(key, value);
       mutations.push({ type: 'metadata-add', key, value });
+      afterMutation('metadata-add');
       return metadataRecord(key);
     },
     values: () => values.map(row => row.slice()),
+    visibleValues: () => {
+      const rowCount = lastRow();
+      const columnCount = lastColumn();
+      return values.slice(0, rowCount).map(row => row.slice(0, columnCount));
+    },
     metadata,
   };
   return sheet;
@@ -400,23 +424,43 @@ function createSheetFake(initialValues, mutations, initialMetadata) {
 function createSnapshotRuntime(options = {}) {
   const mutations = [];
   const logs = [];
-  const calls = { fetches: [], lockAttempts: 0, lockReleases: 0 };
+  const calls = { fetches: [], lockAttempts: 0, lockReleases: 0, historyReads: 0 };
+  const events = [];
+  let pendingFailure = null;
+  const afterMutation = type => {
+    if (!pendingFailure || pendingFailure.type !== type) return;
+    pendingFailure.remaining--;
+    if (pendingFailure.remaining === 0) {
+      pendingFailure = null;
+      throw new Error(`Injected ${type} failure after mutation`);
+    }
+  };
   const clock = { now: new Date(options.now || runAt) };
-  const mappingSheet = createSheetFake(options.mappingValues || cafe24MappingValues(1), mutations);
+  const mappingSheet = createSheetFake(options.mappingValues || cafe24MappingValues(1), mutations, null, afterMutation);
   let historySheet = options.historyValues
-    ? createSheetFake(options.historyValues, mutations, options.historyMetadata)
+    ? createSheetFake(options.historyValues, mutations, options.historyMetadata, afterMutation)
     : null;
   const spreadsheet = {
     getSheetByName: name => {
       if (name === '카페24상품') return mappingSheet;
-      if (name === '가격이력') return historySheet;
+      if (name === '가격이력') {
+        calls.historyReads++;
+        events.push('history-read');
+        return historySheet;
+      }
       return null;
     },
     insertSheet: name => {
       assert.strictEqual(name, '가격이력');
       mutations.push({ type: 'insertSheet', name });
-      historySheet = createSheetFake([], mutations);
+      historySheet = createSheetFake([], mutations, null, afterMutation);
       return historySheet;
+    },
+    deleteSheet: sheet => {
+      assert.strictEqual(sheet, historySheet);
+      mutations.push({ type: 'deleteSheet', name: '가격이력' });
+      historySheet = null;
+      afterMutation('deleteSheet');
     },
   };
   const properties = Object.assign({
@@ -455,8 +499,12 @@ function createSnapshotRuntime(options = {}) {
     calls,
     logs,
     mutations,
+    events,
     mappingSheet,
     getHistorySheet: () => historySheet,
+    failNextMutation: (type, occurrence = 1) => {
+      pendingFailure = { type, remaining: occurrence };
+    },
     setNow: value => { clock.now = new Date(value); },
   };
 }
@@ -673,6 +721,119 @@ test('mapping adapter excludes invalid identities without inventing SINGLE targe
   assert.ok(combinedLogs.includes('MISSING_CUSTOM_VARIANT_CODE'));
   assert.ok(combinedLogs.includes('MISSING_VARIANT_IDENTITY'));
   assert.strictEqual(combinedLogs.includes('SINGLE'), false);
+});
+
+test('a week-column setValues failure restores an existing history sheet and permits a clean rerun', () => {
+  const previousHistory = [
+    ['PROD_CD', '웹카탈로그 상품명', '상품키', '2026-08-10~08-16(일)'],
+    ['P1', 'Old name', '1:V1', 777],
+  ];
+  const runtime = createSnapshotRuntime({
+    mappingValues: cafe24MappingValues(1),
+    fetchEnvelope: envelopeFor(runAt, 1),
+    historyValues: previousHistory,
+  });
+  runtime.failNextMutation('setValues', 2);
+
+  const failed = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(failed.runResult, 'FAILED');
+  assert.deepStrictEqual(runtime.getHistorySheet().visibleValues(), previousHistory);
+  assert.strictEqual(runtime.getHistorySheet().metadata.size, 0);
+
+  const retry = plain(runtime.context.snapshotWeeklyPrice());
+  assert.strictEqual(retry.runResult, 'CREATED');
+  assert.strictEqual(retry.snapshotState, 'CREATED_COMPLETE');
+});
+
+test('an addDeveloperMetadata failure removes the orphan week column and permits a clean rerun', () => {
+  const previousHistory = [
+    ['PROD_CD', '웹카탈로그 상품명', '상품키', '2026-08-10~08-16(일)'],
+    ['P1', 'Old name', '1:V1', 777],
+  ];
+  const runtime = createSnapshotRuntime({
+    mappingValues: cafe24MappingValues(1),
+    fetchEnvelope: envelopeFor(runAt, 1),
+    historyValues: previousHistory,
+  });
+  runtime.failNextMutation('metadata-add');
+
+  const failed = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(failed.runResult, 'FAILED');
+  assert.deepStrictEqual(runtime.getHistorySheet().visibleValues(), previousHistory);
+  assert.strictEqual(runtime.getHistorySheet().metadata.size, 0);
+
+  const retry = plain(runtime.context.snapshotWeeklyPrice());
+  assert.strictEqual(retry.runResult, 'CREATED');
+  assert.strictEqual(retry.snapshotState, 'CREATED_COMPLETE');
+});
+
+test('a hideColumns failure deletes a newly-created history tab and permits a clean rerun', () => {
+  const runtime = createSnapshotRuntime({
+    mappingValues: cafe24MappingValues(1),
+    fetchEnvelope: envelopeFor(runAt, 1),
+  });
+  runtime.failNextMutation('hideColumns');
+
+  const failed = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(failed.runResult, 'FAILED');
+  assert.strictEqual(runtime.getHistorySheet(), null);
+
+  const retry = plain(runtime.context.snapshotWeeklyPrice());
+  assert.strictEqual(retry.runResult, 'CREATED');
+  assert.strictEqual(retry.snapshotState, 'CREATED_COMPLETE');
+});
+
+test('a supplement setValues failure restores blank targets and permits a clean supplement rerun', () => {
+  const weekKey = '2026-08-17~08-23(일)';
+  const metadataKey = `WEEKLY_PRICE_SNAPSHOT:${weekKey}`;
+  const partialRows = cafe24MappingValues(20).slice(1).map((row, index) => [
+    row[3], row[2], `${row[0]}:${row[4]}`, index < 19 ? 1000 : '',
+  ]);
+  const previousHistory = [
+    ['PROD_CD', '웹카탈로그 상품명', '상품키', weekKey],
+    ...partialRows,
+  ];
+  const runtime = createSnapshotRuntime({
+    mappingValues: cafe24MappingValues(20),
+    fetchEnvelope: envelopeFor(runAt, 20),
+    historyValues: previousHistory,
+    historyMetadata: {
+      [metadataKey]: JSON.stringify({
+        firstWrittenAt: '2026-08-24T00:00:00.000Z',
+        state: 'CREATED_PARTIAL',
+      }),
+    },
+  });
+  runtime.failNextMutation('setValues');
+
+  const failed = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(failed.runResult, 'FAILED');
+  assert.deepStrictEqual(runtime.getHistorySheet().visibleValues(), previousHistory);
+  assert.strictEqual(JSON.parse(runtime.getHistorySheet().metadata.get(metadataKey)).state, 'CREATED_PARTIAL');
+
+  const retry = plain(runtime.context.snapshotWeeklyPrice());
+  assert.strictEqual(retry.runResult, 'SUPPLEMENTED');
+  assert.strictEqual(retry.snapshotState, 'CREATED_COMPLETE');
+});
+
+test('derives the envelope missing-rate inputs before reading price-history state', () => {
+  const runtime = createSnapshotRuntime({
+    mappingValues: cafe24MappingValues(20),
+    fetchEnvelope: envelopeFor(runAt, 19),
+  });
+  const realPricesByKey = runtime.context.weeklyPricesByKey_;
+  runtime.context.weeklyPricesByKey_ = envelope => {
+    runtime.events.push('missing-rate-inputs');
+    return realPricesByKey(envelope);
+  };
+
+  runtime.context.snapshotWeeklyPrice();
+
+  assert.ok(runtime.events.indexOf('missing-rate-inputs') < runtime.events.indexOf('history-read'));
 });
 
 test('logs coded status, counts, and identifiers without leaking the bearer secret', () => {

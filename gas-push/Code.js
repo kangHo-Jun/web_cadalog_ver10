@@ -2069,30 +2069,119 @@ function groupWeeklyWrites_(writes, valueSelector) {
     return groups;
 }
 
+function makeWeeklyRangeOperations_(plan) {
+    if (plan.kind === 'CREATE_WEEK') {
+        const metadataRows = [['PROD_CD', '웹카탈로그 상품명', '상품키']].concat(plan.rows);
+        const weekColumnValues = [[plan.weekKey]].concat(plan.weekValues.map(value => [value]));
+        return [
+            { row: 1, column: 1, values: metadataRows },
+            { row: 1, column: plan.weekColumn, values: weekColumnValues },
+        ];
+    }
+    if (plan.kind === 'SUPPLEMENT') {
+        return groupWeeklyWrites_(plan.rowWrites, write => write.values.slice())
+            .map(group => ({ row: group.startRowIndex + 2, column: 1, values: group.values }))
+            .concat(groupWeeklyWrites_(plan.nameWrites, write => [write.value])
+                .map(group => ({ row: group.startRowIndex + 2, column: 2, values: group.values })))
+            .concat(groupWeeklyWrites_(plan.priceWrites, write => [write.value])
+                .map(group => ({ row: group.startRowIndex + 2, column: plan.weekColumn, values: group.values })));
+    }
+    return [];
+}
+
+function findWeeklyMetadata_(sheet, key) {
+    return sheet.createDeveloperMetadataFinder().withKey(key).find() || [];
+}
+
+function captureWeeklyRollbackState_(sheet, operations, metadataKey) {
+    const metadata = findWeeklyMetadata_(sheet, metadataKey);
+    return {
+        ranges: operations.map(operation => ({
+            row: operation.row,
+            column: operation.column,
+            values: sheet.getRange(
+                operation.row,
+                operation.column,
+                operation.values.length,
+                operation.values[0].length
+            ).getValues(),
+        })),
+        metadataExists: metadata.length > 0,
+        metadataValue: metadata.length > 0 ? metadata[0].getValue() : null,
+    };
+}
+
+function restoreWeeklyExecution_(sheet, rollbackState, metadataKey) {
+    for (let index = rollbackState.ranges.length - 1; index >= 0; index--) {
+        const snapshot = rollbackState.ranges[index];
+        sheet.getRange(
+            snapshot.row,
+            snapshot.column,
+            snapshot.values.length,
+            snapshot.values[0].length
+        ).setValues(snapshot.values);
+    }
+    const currentMetadata = findWeeklyMetadata_(sheet, metadataKey);
+    if (rollbackState.metadataExists) {
+        if (currentMetadata.length > 0) currentMetadata[0].setValue(rollbackState.metadataValue);
+        else sheet.addDeveloperMetadata(metadataKey, rollbackState.metadataValue);
+    } else {
+        currentMetadata.forEach(metadata => metadata.remove());
+    }
+}
+
 function writeWeeklyMetadata_(sheet, key, value) {
-    const found = sheet.createDeveloperMetadataFinder().withKey(key).find();
+    const found = findWeeklyMetadata_(sheet, key);
     if (found && found.length > 0) found[0].setValue(value);
     else sheet.addDeveloperMetadata(key, value);
 }
 
 function executeWeeklyWritePlan_(spreadsheet, existingSheet, plan) {
     let sheet = existingSheet;
-    if (plan.kind === 'CREATE_WEEK') {
-        if (!sheet) sheet = spreadsheet.insertSheet('가격이력');
-        const metadataRows = [['PROD_CD', '웹카탈로그 상품명', '상품키']].concat(plan.rows);
-        sheet.getRange(1, 1, metadataRows.length, 3).setValues(metadataRows);
-        const weekColumnValues = [[plan.weekKey]].concat(plan.weekValues.map(value => [value]));
-        sheet.getRange(1, plan.weekColumn, weekColumnValues.length, 1).setValues(weekColumnValues);
-        if (plan.hideColumnC) sheet.hideColumns(3);
-    } else if (plan.kind === 'SUPPLEMENT') {
-        groupWeeklyWrites_(plan.rowWrites, write => write.values.slice())
-            .forEach(group => sheet.getRange(group.startRowIndex + 2, 1, group.values.length, 3).setValues(group.values));
-        groupWeeklyWrites_(plan.nameWrites, write => [write.value])
-            .forEach(group => sheet.getRange(group.startRowIndex + 2, 2, group.values.length, 1).setValues(group.values));
-        groupWeeklyWrites_(plan.priceWrites, write => [write.value])
-            .forEach(group => sheet.getRange(group.startRowIndex + 2, plan.weekColumn, group.values.length, 1).setValues(group.values));
+    let createdSheet = false;
+    let rollbackState = null;
+    try {
+        if (plan.kind === 'CREATE_WEEK' && !sheet) {
+            sheet = spreadsheet.insertSheet('가격이력');
+            createdSheet = true;
+        }
+        const operations = makeWeeklyRangeOperations_(plan);
+        if (!createdSheet) rollbackState = captureWeeklyRollbackState_(sheet, operations, plan.metadataKey);
+        operations.forEach(operation => sheet.getRange(
+            operation.row,
+            operation.column,
+            operation.values.length,
+            operation.values[0].length
+        ).setValues(operation.values));
+        if (plan.kind === 'CREATE_WEEK' && plan.hideColumnC) sheet.hideColumns(3);
+        writeWeeklyMetadata_(sheet, plan.metadataKey, plan.metadataValue);
+    } catch (writeError) {
+        try {
+            if (createdSheet && sheet) spreadsheet.deleteSheet(sheet);
+            else if (sheet && rollbackState) restoreWeeklyExecution_(sheet, rollbackState, plan.metadataKey);
+        } catch (rollbackError) {
+            throw weeklySnapshotError_('WRITE_ROLLBACK_FAILED', 'Weekly snapshot write rollback failed.');
+        }
+        throw weeklySnapshotError_('WRITE_EXECUTION_FAILED', 'Weekly snapshot write failed and was rolled back.');
     }
-    writeWeeklyMetadata_(sheet, plan.metadataKey, plan.metadataValue);
+}
+
+function measureWeeklyEnvelopeMissing_(mappingRows, pricesByKey) {
+    const seenKeys = new Set();
+    let recordedCount = 0;
+    (mappingRows || []).forEach(row => {
+        if (!row || typeof row.stableKey !== 'string') return;
+        const stableKey = row.stableKey.trim();
+        if (!stableKey || seenKeys.has(stableKey)) return;
+        seenKeys.add(stableKey);
+        const price = pricesByKey && pricesByKey[stableKey];
+        if (Number.isFinite(price) && price > 0) recordedCount++;
+    });
+    return {
+        targetCount: seenKeys.size,
+        recordedCount,
+        missingCount: seenKeys.size - recordedCount,
+    };
 }
 
 function weeklySnapshotSummary_(input) {
@@ -2148,6 +2237,13 @@ function snapshotWeeklyPrice() {
             throw weeklySnapshotError_(validation.code, validation.message);
         }
 
+        const pricesByKey = weeklyPricesByKey_(envelope);
+        const envelopeCounts = measureWeeklyEnvelopeMissing_(mappingRows, pricesByKey);
+        if (envelopeCounts.targetCount <= 0 ||
+            envelopeCounts.missingCount / envelopeCounts.targetCount * 100 > 5) {
+            throw weeklySnapshotError_('MISSING_RATE_TOO_HIGH', 'Weekly snapshot missing rate exceeds five percent.');
+        }
+
         const historySheet = spreadsheet.getSheetByName('가격이력');
         const history = readWeeklyHistoryState_(historySheet, weekKey);
         if (history.metadata && history.metadata.state === 'CREATED_COMPLETE') {
@@ -2169,7 +2265,7 @@ function snapshotWeeklyPrice() {
             existingRows: history.rows,
             existingWeekValues: history.weekValues,
             mappingRows,
-            pricesByKey: weeklyPricesByKey_(envelope),
+            pricesByKey,
         });
         const classified = classifyWeeklySnapshotState_({
             existingState: history.metadata ? history.metadata.state : null,
