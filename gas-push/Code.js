@@ -316,6 +316,28 @@ function createTrigger() {
     Logger.log('✅ buildCafe24Cache 1시간, syncPricesFallback 1시간 트리거 생성 완료 (syncPrices는 buildCafe24Cache 완료 후 자동 예약 / 토큰 갱신은 monitoring-gas 담당)');
 }
 
+function inspectWeeklyPriceTriggers_() {
+    return ScriptApp.getProjectTriggers().filter(function (trigger) {
+        return trigger.getHandlerFunction() === 'snapshotWeeklyPrice';
+    });
+}
+
+function installWeeklyPriceTrigger() {
+    if (inspectWeeklyPriceTriggers_().length > 0) {
+        return { created: false, reason: 'ALREADY_EXISTS' };
+    }
+
+    ScriptApp.newTrigger('snapshotWeeklyPrice')
+        .timeBased()
+        .onWeekDay(ScriptApp.WeekDay.MONDAY)
+        .atHour(0)
+        .nearMinute(10)
+        .everyWeeks(1)
+        .inTimezone('Asia/Seoul')
+        .create();
+    return { created: true };
+}
+
 /**
  * syncPrices one-time 트리거 예약 (10분 후).
  * 기존 대기 중인 syncPrices one-time 트리거가 있으면 먼저 삭제 후 재등록.
