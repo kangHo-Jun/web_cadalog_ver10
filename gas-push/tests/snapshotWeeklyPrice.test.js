@@ -630,7 +630,7 @@ test('matches real single products to productNo:SINGLE while keeping option vari
   assert.ok(runtime.logs.join('\n').includes('MISSING_VARIANT_IDENTITY'));
 });
 
-test('normalizes mapping product names like the web catalog and rejects blank normalized names', () => {
+test('fails the entire run before mutation when a mapping product name normalizes to blank', () => {
   const runtime = createSnapshotRuntime({
     mappingValues: [
       ['product_no', 'product_code', 'product_name', 'custom_variant_code', 'variant_code'],
@@ -642,10 +642,10 @@ test('normalizes mapping product names like the web catalog and rejects blank no
 
   const result = plain(runtime.context.snapshotWeeklyPrice());
 
-  assert.strictEqual(result.targetCount, 1);
-  assert.deepStrictEqual(runtime.getHistorySheet().values().slice(1), [
-    ['P1', 'MDF & 합판', '1:V1', 1000],
-  ]);
+  assert.strictEqual(result.runResult, 'FAILED');
+  assert.strictEqual(result.snapshotState, null);
+  assert.strictEqual(runtime.getHistorySheet(), null);
+  assert.deepStrictEqual(runtime.mutations, []);
   assert.ok(runtime.logs.join('\n').includes('BLANK_PRODUCT_NAME'));
 });
 

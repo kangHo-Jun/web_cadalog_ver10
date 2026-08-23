@@ -1993,7 +1993,9 @@ function readWeeklyPriceMapping_(spreadsheet, envelope) {
         let reason = '';
         if (!/^[1-9]\d*$/.test(productNo)) reason = 'MISSING_PRODUCT_NO';
         else if (!prodCd) reason = 'MISSING_CUSTOM_VARIANT_CODE';
-        else if (!productName) reason = 'BLANK_PRODUCT_NAME';
+        else if (!productName) {
+            throw weeklySnapshotError_('BLANK_PRODUCT_NAME', 'A mapping product name is blank after normalization.');
+        }
         else if (!variantCode) reason = 'MISSING_VARIANT_IDENTITY';
         let stableKey = '';
         if (!reason) {
