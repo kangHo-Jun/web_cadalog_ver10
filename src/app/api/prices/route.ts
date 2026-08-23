@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
+import {
+    getCatalogGroups,
+    type CatalogSnapshotEnvelope,
+} from '@/lib/catalog-snapshot';
 import { getPriceMap } from '@/lib/price-map';
+import type { GroupedProduct } from '@/lib/product-utils';
 import { redisGet } from '@/lib/redis-client';
 
 export const dynamic = 'force-dynamic';
@@ -20,11 +25,14 @@ export async function GET() {
 
         if (isTestPeriod) {
             // [테스트 전용 로직] 
-            const snapshot = await redisGet<Record<string, any>>('catalog:snapshot:v1') || {};
+            const snapshot = await redisGet<CatalogSnapshotEnvelope | Record<string, GroupedProduct>>(
+                'catalog:snapshot:v1'
+            ) || {};
+            const groups = getCatalogGroups(snapshot);
 
             // 철물/부자재(223) 카테고리 품목 추출 (이름 및 코드 포함)
             const targetMatches = new Set<string>();
-            Object.values(snapshot).forEach((group: any) => {
+            Object.values(groups).forEach((group: any) => {
                 const categoryNos = Array.isArray(group.categoryNo) ? group.categoryNo : [];
                 const isHardware = categoryNos.some((cat: any) => String(cat) === '223');
 

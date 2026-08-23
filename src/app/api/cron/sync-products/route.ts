@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from 'redis';
 import apiClient from '@/lib/api-client';
-import { normalizeProductName, GroupedProduct, ChildItem } from '@/lib/product-utils';
+import { buildCatalogSnapshot } from '@/lib/catalog-snapshot';
 import { QUOTE_CATEGORIES, QUOTE_CATEGORY_NOS } from '@/config/quote-categories';
 
 const CATEGORY_NOS = QUOTE_CATEGORY_NOS;
@@ -39,61 +39,8 @@ export async function GET() {
       }
     }
 
-    const grouped: Record<string, GroupedProduct> = {};
-
-    for (const product of allProducts) {
-      const parentCode = product.product_code;
-      if (!parentCode) continue;
-
-      if (grouped[parentCode]) {
-        const catNo = product._categoryNo || 0;
-        if (!grouped[parentCode].categoryNo!.includes(catNo)) {
-          grouped[parentCode].categoryNo!.push(catNo);
-        }
-        continue;
-      }
-
-      const parentName = normalizeProductName(product.product_name);
-      const detail_image = product.detail_image || '';
-
-      let children: ChildItem[] = [];
-
-      if (product.options?.has_option === 'T') {
-        const optionsList = product.options?.options;
-        const optionValues: any[] = optionsList?.[0]?.option_value || [];
-        const variants: any[] = product.variants || [];
-
-        children = optionValues.map((ov: any) => {
-          const name = ov.value || ov.option_text || '';
-          const matchedVariant = variants.find((v: any) =>
-            v.options?.some((o: any) => o.value === name)
-          );
-
-          const additionalAmount = Number(matchedVariant?.additional_amount || 0);
-          const basePrice = Number(product.price || 0);
-          const price = basePrice + additionalAmount;
-          const variantCode = matchedVariant?.variant_code || '';
-
-          return { name, price, variantCode };
-        }).filter((child: ChildItem) => child.name);
-      } else {
-        children = [{
-          name: parentName,
-          price: Number(product.price || 0),
-          isSingle: true
-        }];
-      }
-
-      grouped[parentCode] = {
-        id: parentCode,
-        parentName,
-        detail_image,
-        categoryNo: [product._categoryNo || 0],
-        children
-      };
-    }
-
-    const groups = Object.values(grouped).sort((a, b) => {
+    const snapshot = buildCatalogSnapshot(allProducts, new Date());
+    const groups = Object.values(snapshot.groups).sort((a, b) => {
       const aIdx = getCategorySortIndex(a.categoryNo);
       const bIdx = getCategorySortIndex(b.categoryNo);
       if (aIdx !== bIdx) return aIdx - bIdx;
@@ -107,18 +54,20 @@ export async function GET() {
       return aName.localeCompare(bName, aIsEng ? 'en' : 'ko');
     });
 
-    const sortedGrouped = Object.fromEntries(
+    snapshot.groups = Object.fromEntries(
       groups.map((group) => [group.id, group])
     );
 
     const client = createClient({ url: process.env.KV_REDIS_URL });
     await client.connect();
-    await client.set(SNAPSHOT_KEY, JSON.stringify(sortedGrouped));
+    await client.set(SNAPSHOT_KEY, JSON.stringify(snapshot));
     await client.quit();
 
     return NextResponse.json({
       success: true,
       products: groups.length,
+      generatedAt: snapshot.generatedAt,
+      schemaVersion: snapshot.schemaVersion,
       debug: 'cron-sync-v2'
     });
 

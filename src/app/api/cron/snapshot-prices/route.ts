@@ -1,4 +1,9 @@
 import { NextResponse } from 'next/server';
+import {
+    getCatalogGroups,
+    type CatalogSnapshotEnvelope,
+} from '@/lib/catalog-snapshot';
+import type { GroupedProduct } from '@/lib/product-utils';
 import { redisGet, redisSet } from '@/lib/redis-client';
 
 export const dynamic = 'force-dynamic';
@@ -20,10 +25,13 @@ export async function GET(request: Request) {
 
     try {
         // 1. 카탈로그 스냅샷에서 variantCode → price 맵 추출
-        const snapshot = await redisGet<Record<string, any>>('catalog:snapshot:v1') || {};
+        const snapshot = await redisGet<CatalogSnapshotEnvelope | Record<string, GroupedProduct>>(
+            'catalog:snapshot:v1'
+        ) || {};
+        const groups = getCatalogGroups(snapshot);
 
         const variantPriceMap: Record<string, number> = {};
-        Object.values(snapshot).forEach((group: any) => {
+        Object.values(groups).forEach((group: any) => {
             group.children?.forEach((child: any) => {
                 const vCode = child.variantCode || child.variant_code;
                 const price = Number(child.price || 0);
