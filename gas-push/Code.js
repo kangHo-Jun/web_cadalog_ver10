@@ -1898,6 +1898,9 @@ function fetchWeeklyPriceEnvelope_() {
     if (!url) {
         throw weeklySnapshotError_('MISSING_SNAPSHOT_URL', 'Weekly snapshot URL is not configured.');
     }
+    if (!/^https:\/\/[^\s/?#]+(?:[/?#]|$)/i.test(url)) {
+        throw weeklySnapshotError_('INVALID_SNAPSHOT_URL', 'Weekly snapshot URL must use HTTPS.');
+    }
     if (!secret) {
         throw weeklySnapshotError_('MISSING_SNAPSHOT_SECRET', 'Weekly snapshot secret is not configured.');
     }
@@ -1944,7 +1947,35 @@ function fetchWeeklyPriceEnvelope_() {
     return envelope;
 }
 
-function readWeeklyPriceMapping_(spreadsheet) {
+function normalizeWeeklyProductName_(name) {
+    if (!name) return '';
+    return String(name)
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function weeklySnapshotIdentitiesByProduct_(envelope) {
+    const identities = {};
+    Object.values(envelope.groups || {}).forEach(group => {
+        (group.children || []).forEach(child => {
+            if (!child || typeof child !== 'object') return;
+            const productNo = String(child.productNo);
+            if (!identities[productNo]) identities[productNo] = { single: false, variants: new Set() };
+            if (child.isSingle === true) identities[productNo].single = true;
+            else if (typeof child.variantCode === 'string' && child.variantCode.trim()) {
+                identities[productNo].variants.add(child.variantCode.trim());
+            }
+        });
+    });
+    return identities;
+}
+
+function readWeeklyPriceMapping_(spreadsheet, envelope) {
     const sheet = spreadsheet.getSheetByName('카페24상품');
     if (!sheet) {
         throw weeklySnapshotError_('MAPPING_SHEET_MISSING', 'The Cafe24 product mapping sheet is missing.');
@@ -1952,17 +1983,25 @@ function readWeeklyPriceMapping_(spreadsheet) {
     const values = sheet.getDataRange().getValues();
     const rows = [];
     const seenKeys = new Set();
+    const snapshotIdentities = weeklySnapshotIdentitiesByProduct_(envelope);
     for (let index = 1; index < values.length; index++) {
         const source = values[index] || [];
         const productNo = String(source[0] === undefined || source[0] === null ? '' : source[0]).trim();
-        const productName = String(source[2] === undefined || source[2] === null ? '' : source[2]).trim();
+        const productName = normalizeWeeklyProductName_(source[2]);
         const prodCd = String(source[3] === undefined || source[3] === null ? '' : source[3]).trim();
         const variantCode = String(source[4] === undefined || source[4] === null ? '' : source[4]).trim();
         let reason = '';
         if (!/^[1-9]\d*$/.test(productNo)) reason = 'MISSING_PRODUCT_NO';
         else if (!prodCd) reason = 'MISSING_CUSTOM_VARIANT_CODE';
+        else if (!productName) reason = 'BLANK_PRODUCT_NAME';
         else if (!variantCode) reason = 'MISSING_VARIANT_IDENTITY';
-        const stableKey = reason ? '' : productNo + ':' + variantCode;
+        let stableKey = '';
+        if (!reason) {
+            const identities = snapshotIdentities[productNo];
+            if (identities && identities.single) stableKey = productNo + ':SINGLE';
+            else if (!identities || identities.variants.has(variantCode)) stableKey = productNo + ':' + variantCode;
+            else reason = 'MISSING_VARIANT_IDENTITY';
+        }
         if (!reason && seenKeys.has(stableKey)) reason = 'DUPLICATE_STABLE_KEY';
         if (reason) {
             Logger.log('[snapshotWeeklyPrice] code=MAPPING_ROW_EXCLUDED row=' + (index + 1) +
@@ -2033,6 +2072,15 @@ function readWeeklyHistoryState_(sheet, weekKey) {
         throw weeklySnapshotError_('MISSING_WEEK_COLUMN', 'Weekly snapshot metadata exists without a price column.');
     }
     const rows = values.slice(1).map(row => [row[0] || '', row[1] || '', row[2] || '']);
+    const historyKeys = new Set();
+    rows.forEach(row => {
+        const key = typeof row[2] === 'string' ? row[2].trim() : '';
+        if (!key) return;
+        if (historyKeys.has(key)) {
+            throw weeklySnapshotError_('DUPLICATE_HISTORY_STABLE_KEY', 'Price history contains duplicate stable keys.');
+        }
+        historyKeys.add(key);
+    });
     const weekValues = weekColumn > 0
         ? values.slice(1).map(row => row[weekColumn - 1] === undefined || row[weekColumn - 1] === null ? '' : row[weekColumn - 1])
         : rows.map(() => '');
@@ -2253,7 +2301,7 @@ function snapshotWeeklyPrice() {
         weekKey = makeWeeklyPriceKey_(runAt);
         envelope = fetchWeeklyPriceEnvelope_();
         const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-        const mappingRows = readWeeklyPriceMapping_(spreadsheet);
+        const mappingRows = readWeeklyPriceMapping_(spreadsheet, envelope);
         validation = validateWeeklyEnvelope_(envelope, mappingRows, runAt);
         if (!validation.ok) {
             throw weeklySnapshotError_(validation.code, validation.message);
@@ -2281,6 +2329,20 @@ function snapshotWeeklyPrice() {
             });
             logWeeklySnapshotSummary_(skippedComplete, 'COMPLETE_WEEK_EXISTS');
             return skippedComplete;
+        }
+        if (history.metadata && history.metadata.state === 'LOCKED_PARTIAL') {
+            const lockedPartial = weeklySnapshotSummary_({
+                weekKey,
+                runResult: 'SKIPPED',
+                snapshotState: 'LOCKED_PARTIAL',
+                targetCount: validation.targetCount,
+                recordedCount: envelopeCounts.recordedCount,
+                missingCount: envelopeCounts.missingCount,
+                generatedAt: validation.generatedAt,
+                coveragePct: validation.coveragePct,
+            });
+            logWeeklySnapshotSummary_(lockedPartial, 'LOCKED_WEEK_EXISTS');
+            return lockedPartial;
         }
 
         const projection = projectWeeklyRows_({

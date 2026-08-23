@@ -530,6 +530,19 @@ test('fails closed for missing credentials, HTTP errors, malformed JSON, and non
   }
 });
 
+test('rejects a plaintext snapshot URL before fetching or exposing the bearer secret', () => {
+  const runtime = createSnapshotRuntime({
+    properties: { WEEKLY_PRICE_SNAPSHOT_URL: 'http://snapshot.example.test/v2' },
+  });
+
+  const result = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(result.runResult, 'FAILED');
+  assert.strictEqual(runtime.calls.fetches.length, 0);
+  assert.deepStrictEqual(runtime.mutations, []);
+  assert.strictEqual(runtime.logs.join('\n').includes('top-secret-bearer'), false);
+});
+
 test('lock acquisition failure returns FAILED before fetching or mutating Sheets', () => {
   const runtime = createSnapshotRuntime({ lockAcquired: false });
 
@@ -588,6 +601,71 @@ test('first complete snapshot creates hidden A:C metadata and one batched week c
   const metadataValue = [...history.metadata.values()].map(JSON.parse)[0];
   assert.strictEqual(metadataValue.firstWrittenAt, '2026-08-24T00:00:00.000Z');
   assert.strictEqual(metadataValue.state, 'CREATED_COMPLETE');
+});
+
+test('matches real single products to productNo:SINGLE while keeping option variants exact', () => {
+  const singleEnvelope = envelopeFor(runAt, 0);
+  singleEnvelope.groups.catalog.children = [
+    { name: 'Single', price: 2200, productNo: 10, variantCode: 'P000SINGLE000A', isSingle: true },
+    { name: 'Option A', price: 3300, productNo: 20, variantCode: 'P000OPTION00A' },
+  ];
+  const runtime = createSnapshotRuntime({
+    mappingValues: [
+      ['product_no', 'product_code', 'product_name', 'custom_variant_code', 'variant_code'],
+      [10, 'CAFE10', 'Single', 'S10', 'P000SINGLE000A'],
+      [20, 'CAFE20', 'Option A', 'O20', 'P000OPTION00A'],
+      [20, 'CAFE20', 'Wrong option', 'BAD20', 'P000OPTION00B'],
+    ],
+    fetchEnvelope: singleEnvelope,
+  });
+
+  const result = plain(runtime.context.snapshotWeeklyPrice());
+  const rows = runtime.getHistorySheet().values().slice(1);
+
+  assert.strictEqual(result.runResult, 'CREATED');
+  assert.deepStrictEqual(rows, [
+    ['S10', 'Single', '10:SINGLE', 2000],
+    ['O20', 'Option A', '20:P000OPTION00A', 3000],
+  ]);
+  assert.ok(runtime.logs.join('\n').includes('MISSING_VARIANT_IDENTITY'));
+});
+
+test('normalizes mapping product names like the web catalog and rejects blank normalized names', () => {
+  const runtime = createSnapshotRuntime({
+    mappingValues: [
+      ['product_no', 'product_code', 'product_name', 'custom_variant_code', 'variant_code'],
+      [1, 'CAFE1', '<p>MDF&nbsp;&amp; 합판</p>', 'P1', 'V1'],
+      [2, 'CAFE2', '<br><div>&nbsp;</div>', 'P2', 'V2'],
+    ],
+    fetchEnvelope: envelopeFor(runAt, 2),
+  });
+
+  const result = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(result.targetCount, 1);
+  assert.deepStrictEqual(runtime.getHistorySheet().values().slice(1), [
+    ['P1', 'MDF & 합판', '1:V1', 1000],
+  ]);
+  assert.ok(runtime.logs.join('\n').includes('BLANK_PRODUCT_NAME'));
+});
+
+test('fails closed before mutation when existing history contains duplicate nonblank stable keys', () => {
+  const runtime = createSnapshotRuntime({
+    mappingValues: cafe24MappingValues(1),
+    fetchEnvelope: envelopeFor(runAt, 1),
+    historyValues: [
+      ['PROD_CD', '웹카탈로그 상품명', '상품키', '2026-08-10~08-16(일)'],
+      ['P1', 'One', '1:V1', 1000],
+      ['P1-copy', 'One copy', '1:V1', 1000],
+    ],
+  });
+
+  const before = runtime.getHistorySheet().visibleValues();
+  const result = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(result.runResult, 'FAILED');
+  assert.deepStrictEqual(runtime.getHistorySheet().visibleValues(), before);
+  assert.deepStrictEqual(runtime.mutations, []);
 });
 
 test('first snapshot at exactly five percent missing creates a partial week', () => {
@@ -673,6 +751,14 @@ test('partial rerun after 24 hours skips as LOCKED_PARTIAL without touching pric
   assert.strictEqual(laterMutations.some(write => write.type === 'setValues'), false);
   const metadataValue = [...runtime.getHistorySheet().metadata.values()].map(JSON.parse)[0];
   assert.strictEqual(metadataValue.state, 'LOCKED_PARTIAL');
+
+  const mutationOffsetAfterLock = runtime.mutations.length;
+  runtime.setNow('2026-08-25T01:00:00.000Z');
+  const thirdRun = plain(runtime.context.snapshotWeeklyPrice());
+
+  assert.strictEqual(thirdRun.runResult, 'SKIPPED');
+  assert.strictEqual(thirdRun.snapshotState, 'LOCKED_PARTIAL');
+  assert.deepStrictEqual(runtime.mutations.slice(mutationOffsetAfterLock), []);
 });
 
 test('a new week updates active names and retains ended products and historical prices', () => {
