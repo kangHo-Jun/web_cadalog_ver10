@@ -32,7 +32,9 @@ export function normalizeProductName(name: string): string {
 export interface ChildItem {
     name: string;           // 옵션값 표시명 (예: "30T x 1000 x 1800")
     price: number;          // 기본가 + 추가금액
+    productNo?: number;     // Cafe24 product_no
     variantCode?: string;   // Cafe24 variant_code (옵션 상품인 경우)
+    customVariantCode?: string; // Cafe24 custom_variant_code
     isSingle?: boolean;     // 단일 상품 플래그 (has_option: 'F')
 }
 
