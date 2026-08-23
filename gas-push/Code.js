@@ -1637,8 +1637,13 @@ function validateWeeklyEnvelope_(envelope, mappingRows, runAt) {
     let duplicateStableKey = '';
     let hasInvalidPrice = false;
     let hasInvalidStableKey = false;
+    let hasMalformedChild = false;
     groups.forEach(group => {
         group.children.forEach(child => {
+            if (!child || typeof child !== 'object' || Array.isArray(child)) {
+                hasMalformedChild = true;
+                return;
+            }
             if (!Number.isFinite(child.price) || child.price <= 0) hasInvalidPrice = true;
             const hasProductNo = Number.isFinite(Number(child.productNo)) && Number(child.productNo) > 0;
             const hasVariantCode = typeof child.variantCode === 'string' && child.variantCode.trim() !== '';
@@ -1652,6 +1657,16 @@ function validateWeeklyEnvelope_(envelope, mappingRows, runAt) {
             snapshotKeys.add(stableKey);
         });
     });
+
+    if (hasMalformedChild) {
+        return {
+            ok: false,
+            code: 'INVALID_SCHEMA',
+            message: 'Catalog snapshot children must be objects.',
+            targetCount,
+            matchedCount: 0,
+        };
+    }
 
     if (hasInvalidPrice) {
         return {

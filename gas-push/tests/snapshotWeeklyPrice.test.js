@@ -155,6 +155,21 @@ test('returns an explicit schema failure for malformed group children', () => {
   assert.strictEqual(result.code, 'INVALID_SCHEMA');
 });
 
+test('returns a coded schema failure when a child entry is null', () => {
+  const envelope = envelopeAtAgeHours(1, 1);
+  envelope.groups.catalog.children = [null];
+
+  const result = context.validateWeeklyEnvelope_(envelope, mappingRows(1), runAt);
+
+  assert.deepStrictEqual(plain(result), {
+    ok: false,
+    code: 'INVALID_SCHEMA',
+    message: 'Catalog snapshot children must be objects.',
+    targetCount: 1,
+    matchedCount: 0,
+  });
+});
+
 test('rejects duplicate stable keys anywhere in the snapshot', () => {
   const envelope = envelopeAtAgeHours(1, 1);
   envelope.groups.duplicate = {
