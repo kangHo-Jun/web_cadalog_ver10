@@ -28,9 +28,9 @@ const envelope = {
   },
 };
 
-function request(authorization?: string, extraHeaders?: Record<string, string>) {
+function request(authorization?: string) {
   return new Request('https://example.test/api/weekly-price-snapshot', {
-    headers: { ...(authorization ? { authorization } : {}), ...extraHeaders },
+    headers: authorization ? { authorization } : undefined,
   });
 }
 
@@ -42,30 +42,6 @@ describe('GET /api/weekly-price-snapshot', () => {
 
   afterEach(() => {
     delete process.env.WEEKLY_PRICE_SNAPSHOT_SECRET;
-    delete process.env.VERCEL_ENV;
-  });
-
-  it('TEMP DEBUG returns only the preview secret length and hash prefix', async () => {
-    process.env.VERCEL_ENV = 'preview';
-
-    const response = await GET(request(undefined, { 'x-debug-secret-check': '1' }));
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      serverSecretLength: 13,
-      serverSecretSha256Prefix: 'f9aa03cd196b5d4d',
-    });
-    expect(response.headers.get('cache-control')).toContain('no-store');
-    expect(vi.mocked(redisGet)).not.toHaveBeenCalled();
-  });
-
-  it('TEMP DEBUG is ignored outside Vercel Preview', async () => {
-    process.env.VERCEL_ENV = 'production';
-
-    const response = await GET(request(undefined, { 'x-debug-secret-check': '1' }));
-
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: 'unauthorized' });
   });
 
   it('fails closed when the bearer secret is not configured', async () => {
