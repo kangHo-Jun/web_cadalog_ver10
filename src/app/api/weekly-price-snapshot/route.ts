@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { CatalogSnapshotEnvelope } from '@/lib/catalog-snapshot';
 import { redisGet } from '@/lib/redis-client';
 
@@ -68,6 +70,16 @@ function unavailableResponse() {
 export async function GET(request: Request) {
   const expected = process.env.WEEKLY_PRICE_SNAPSHOT_SECRET;
   const supplied = request.headers.get('authorization');
+
+  // TEMP DEBUG, remove before merge.
+  if (process.env.VERCEL_ENV === 'preview'
+    && request.headers.get('x-debug-secret-check') === '1') {
+    const value = expected ?? '';
+    return Response.json({
+      serverSecretLength: value.length,
+      serverSecretSha256Prefix: createHash('sha256').update(value).digest('hex').slice(0, 16),
+    }, { headers: NO_STORE_HEADERS });
+  }
 
   if (!expected) {
     return Response.json(
