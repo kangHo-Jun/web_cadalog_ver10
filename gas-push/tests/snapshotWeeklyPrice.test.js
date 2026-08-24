@@ -466,6 +466,7 @@ function createSnapshotRuntime(options = {}) {
   const properties = Object.assign({
     WEEKLY_PRICE_SNAPSHOT_URL: 'https://snapshot.example.test/v2',
     WEEKLY_PRICE_SNAPSHOT_SECRET: 'top-secret-bearer',
+    VERCEL_PROTECTION_BYPASS: 'top-secret-vercel-bypass',
   }, options.properties || {});
   const responseStatus = options.responseStatus === undefined ? 200 : options.responseStatus;
   const context = {
@@ -509,10 +510,30 @@ function createSnapshotRuntime(options = {}) {
   };
 }
 
-test('fails closed for missing credentials, HTTP errors, malformed JSON, and non-v2 responses', () => {
+test('fails before fetching when a required weekly snapshot property is missing', () => {
   const cases = [
-    { properties: { WEEKLY_PRICE_SNAPSHOT_URL: '' } },
-    { properties: { WEEKLY_PRICE_SNAPSHOT_SECRET: '' } },
+    [{ WEEKLY_PRICE_SNAPSHOT_URL: '' }, 'MISSING_SNAPSHOT_URL'],
+    [{ WEEKLY_PRICE_SNAPSHOT_SECRET: '' }, 'MISSING_SNAPSHOT_SECRET'],
+    [{ VERCEL_PROTECTION_BYPASS: '' }, 'MISSING_VERCEL_PROTECTION_BYPASS'],
+  ];
+
+  for (const [properties, expectedCode] of cases) {
+    const runtime = createSnapshotRuntime({ properties });
+    const result = plain(runtime.context.snapshotWeeklyPrice());
+    const combinedLogs = runtime.logs.join('\n');
+    assert.strictEqual(result.runResult, 'FAILED');
+    assert.strictEqual(result.snapshotState, null);
+    assert.strictEqual(runtime.calls.fetches.length, 0);
+    assert.deepStrictEqual(runtime.mutations, []);
+    assert.strictEqual(runtime.calls.lockReleases, 1);
+    assert.ok(combinedLogs.includes(expectedCode));
+    assert.strictEqual(combinedLogs.includes('top-secret-bearer'), false);
+    assert.strictEqual(combinedLogs.includes('top-secret-vercel-bypass'), false);
+  }
+});
+
+test('fails closed for HTTP errors, malformed JSON, and non-v2 responses', () => {
+  const cases = [
     { responseStatus: 401 },
     { responseStatus: 429 },
     { responseStatus: 503 },
@@ -937,8 +958,10 @@ test('logs coded status, counts, and identifiers without leaking the bearer secr
   assert.ok(combinedLogs.includes('targetCount=2'));
   assert.ok(combinedLogs.includes('recordedCount=2'));
   assert.strictEqual(combinedLogs.includes('top-secret-bearer'), false);
+  assert.strictEqual(combinedLogs.includes('top-secret-vercel-bypass'), false);
   assert.strictEqual(runtime.calls.fetches.length, 1);
   assert.strictEqual(runtime.calls.fetches[0].options.headers.Authorization, 'Bearer top-secret-bearer');
+  assert.strictEqual(runtime.calls.fetches[0].options.headers['x-vercel-protection-bypass'], 'top-secret-vercel-bypass');
   assert.strictEqual(runtime.calls.fetches[0].options.muteHttpExceptions, true);
   assert.strictEqual(runtime.calls.fetches[0].options.timeoutSeconds, 30);
 });

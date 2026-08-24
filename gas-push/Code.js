@@ -1895,6 +1895,7 @@ function fetchWeeklyPriceEnvelope_() {
     const props = PropertiesService.getScriptProperties();
     const url = props.getProperty('WEEKLY_PRICE_SNAPSHOT_URL');
     const secret = props.getProperty('WEEKLY_PRICE_SNAPSHOT_SECRET');
+    const vercelProtectionBypass = props.getProperty('VERCEL_PROTECTION_BYPASS');
     if (!url) {
         throw weeklySnapshotError_('MISSING_SNAPSHOT_URL', 'Weekly snapshot URL is not configured.');
     }
@@ -1904,12 +1905,18 @@ function fetchWeeklyPriceEnvelope_() {
     if (!secret) {
         throw weeklySnapshotError_('MISSING_SNAPSHOT_SECRET', 'Weekly snapshot secret is not configured.');
     }
+    if (!vercelProtectionBypass) {
+        throw weeklySnapshotError_('MISSING_VERCEL_PROTECTION_BYPASS', 'Vercel protection bypass is not configured.');
+    }
 
     let response;
     try {
         response = UrlFetchApp.fetch(url, {
             method: 'get',
-            headers: { Authorization: 'Bearer ' + secret },
+            headers: {
+                Authorization: 'Bearer ' + secret,
+                'x-vercel-protection-bypass': vercelProtectionBypass,
+            },
             muteHttpExceptions: true,
             followRedirects: false,
             validateHttpsCertificates: true,
